@@ -8,7 +8,8 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
   }
 
   fastify.addHook("onRequest", async (request, reply) => {
-    if (request.routeOptions.url === "/webhooks/github" || request.routeOptions.url === "/health") {
+    const path = request.url.split("?")[0];
+    if (path === "/webhooks/github" || path === "/health") {
       return;
     }
     const header = request.headers.authorization;

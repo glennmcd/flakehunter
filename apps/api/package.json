@@ -24,6 +24,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.2.15",
     "@types/bun": "^1.1.14",
-    "drizzle-kit": "^0.28.1"
+    "drizzle-kit": "^0.28.1",
+    "typescript": "^5.7.2"
   }
 }
