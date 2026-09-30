@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { sql } from "drizzle-orm";
 import { strToU8, zipSync } from "fflate";
 import { createTestDb } from "../../test/testDb.js";
-import { repos, reports, workflowRuns } from "../db/schema.js";
+import { reports, repos, workflowRuns } from "../db/schema.js";
 import type { GithubClient } from "../github/client.js";
 import { processWorkflowRun } from "./processWorkflowRun.js";
 
