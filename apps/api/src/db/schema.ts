@@ -67,6 +67,37 @@ export const workflowRuns = pgTable(
   ],
 );
 
+/** Idempotency record for uploads: one row per (run, report key); a repeat insert means a duplicate upload. */
+export const reports = pgTable(
+  "reports",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    runId: bigint("run_id", { mode: "number" })
+      .notNull()
+      .references(() => workflowRuns.id, { onDelete: "cascade" }),
+    reportKey: text("report_key").notNull().default("default"),
+    suiteCount: integer("suite_count").notNull().default(0),
+    testCount: integer("test_count").notNull().default(0),
+    passedCount: integer("passed_count").notNull().default(0),
+    failedCount: integer("failed_count").notNull().default(0),
+    errorCount: integer("error_count").notNull().default(0),
+    skippedCount: integer("skipped_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.runId, table.reportKey)],
+);
+
+export const repoApiTokens = pgTable("repo_api_tokens", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  repoId: bigint("repo_id", { mode: "number" })
+    .notNull()
+    .references(() => repos.id),
+  tokenHash: text("token_hash").notNull().unique(),
+  prefix: text("prefix").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+
 export const testSuites = pgTable(
   "test_suites",
   {
