@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { sql } from "drizzle-orm";
+import { seedRepo, seedRun } from "../../test/fixtures.js";
 import { createTestDb } from "../../test/testDb.js";
-import { repos, workflowRuns } from "../db/schema.js";
 import { insertParsedSuites, summarizeSuites } from "./insertParsedSuites.js";
 import type { ParsedSuite } from "./junitParser.js";
 
@@ -31,18 +31,12 @@ describe("insertParsedSuites", () => {
   it("inserts suites, dedupes test_cases, and numbers repeated names with occurrence_index", async () => {
     const { db, close } = await createTestDb();
     try {
-      const [repo] = await db
-        .insert(repos)
-        .values({ githubRepoId: 1, owner: "acme", name: "widgets", fullName: "acme/widgets" })
-        .returning({ id: repos.id });
-      const [run] = await db
-        .insert(workflowRuns)
-        .values({ repoId: repo!.id, githubRunId: 1, workflowName: "CI", headSha: "abc", status: "completed" })
-        .returning({ id: workflowRuns.id });
+      const repo = await seedRepo(db);
+      const run = await seedRun(db, repo.id, { headSha: "abc" });
 
-      await insertParsedSuites(db, { runId: run!.id, repoId: repo!.id, headSha: "abc", suites: SUITES });
+      await insertParsedSuites(db, { runId: run.id, repoId: repo.id, headSha: "abc", suites: SUITES });
       // A second upload on the same repo reuses test_cases rather than duplicating them.
-      await insertParsedSuites(db, { runId: run!.id, repoId: repo!.id, headSha: "abc", suites: SUITES });
+      await insertParsedSuites(db, { runId: run.id, repoId: repo.id, headSha: "abc", suites: SUITES });
 
       const { rows: cases } = await db.execute(sql`select count(*)::int as n from test_cases`);
       expect(cases[0]).toMatchObject({ n: 3 });
