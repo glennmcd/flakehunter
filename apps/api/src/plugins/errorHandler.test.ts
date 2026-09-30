@@ -72,6 +72,27 @@ describe("error handler", () => {
     expect(res.json().error.code).toBe("payload_too_large");
   });
 
+  it("maps other client errors (unsupported media type, malformed JSON) to 400 validation_error", async () => {
+    const app = await buildApp();
+    const unsupported = await app.inject({
+      method: "POST",
+      url: "/small",
+      headers: { "content-type": "application/x-weird" },
+      payload: "x",
+    });
+    expect(unsupported.statusCode).toBe(400);
+    expect(unsupported.json().error.code).toBe("validation_error");
+
+    const malformed = await app.inject({
+      method: "POST",
+      url: "/small",
+      headers: { "content-type": "application/json" },
+      payload: "{nope",
+    });
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json().error.code).toBe("validation_error");
+  });
+
   it("returns 500 internal_error without leaking the underlying message", async () => {
     const app = await buildApp();
     const res = await app.inject({ method: "GET", url: "/boom" });

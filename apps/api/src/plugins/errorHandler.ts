@@ -24,6 +24,12 @@ const errorHandlerPlugin: FastifyPluginAsync = async (fastify) => {
       return reply.code(413).send(errorBody("payload_too_large", "Request body is too large", requestId));
     }
 
+    // Remaining Fastify client errors (unsupported media type, malformed JSON, ...).
+    const statusCode = (err as { statusCode?: number }).statusCode;
+    if (statusCode && statusCode >= 400 && statusCode < 500) {
+      return reply.code(400).send(errorBody("validation_error", (err as Error).message, requestId));
+    }
+
     request.log.error(err);
     return reply.code(500).send(errorBody("internal_error", "Internal server error", requestId));
   });
