@@ -1,9 +1,9 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import Fastify from "fastify";
 import autoload from "@fastify/autoload";
-import dbPlugin from "./plugins/db.js";
+import Fastify from "fastify";
 import authPlugin from "./plugins/auth.js";
+import dbPlugin from "./plugins/db.js";
 import githubPlugin from "./plugins/github.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

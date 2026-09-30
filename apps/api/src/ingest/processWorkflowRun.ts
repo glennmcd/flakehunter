@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
 import type { AnyDb } from "../db/client.js";
-import type { GithubClient } from "../github/client.js";
 import { testCases, testResults, testSuites, workflowRuns } from "../db/schema.js";
 import { downloadArtifactZip, listRunArtifacts } from "../github/artifacts.js";
-import { extractXmlFiles } from "./zipExtract.js";
+import type { GithubClient } from "../github/client.js";
 import { parseJunitXml } from "./junitParser.js";
+import { extractXmlFiles } from "./zipExtract.js";
 
 export interface WorkflowRunInput {
   repoId: number;

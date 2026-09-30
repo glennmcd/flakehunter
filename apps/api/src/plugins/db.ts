@@ -1,5 +1,5 @@
-import fp from "fastify-plugin";
 import type { FastifyPluginAsync } from "fastify";
+import fp from "fastify-plugin";
 import { createDb, type Db } from "../db/client.js";
 
 declare module "fastify" {

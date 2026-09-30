@@ -1,8 +1,8 @@
+import type { GithubWorkflowRunEvent } from "@flakehunter/shared-types";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import type { GithubWorkflowRunEvent } from "@flakehunter/shared-types";
-import { createWebhookVerifier } from "../../github/webhookVerify.js";
 import { repos, webhookEvents } from "../../db/schema.js";
+import { createWebhookVerifier } from "../../github/webhookVerify.js";
 import { processWorkflowRun } from "../../ingest/processWorkflowRun.js";
 
 declare module "fastify" {
@@ -18,19 +18,15 @@ const githubWebhookRoute: FastifyPluginAsync = async (fastify) => {
   }
   const verifier = createWebhookVerifier(secret);
 
-  fastify.addContentTypeParser(
-    "application/json",
-    { parseAs: "buffer" },
-    (req: FastifyRequest, body: Buffer, done) => {
-      req.rawBody = body;
-      try {
-        const json = body.length ? JSON.parse(body.toString("utf8")) : {};
-        done(null, json);
-      } catch (err) {
-        done(err as Error, undefined);
-      }
-    },
-  );
+  fastify.addContentTypeParser("application/json", { parseAs: "buffer" }, (req: FastifyRequest, body: Buffer, done) => {
+    req.rawBody = body;
+    try {
+      const json = body.length ? JSON.parse(body.toString("utf8")) : {};
+      done(null, json);
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
 
   fastify.post("/github", async (request, reply) => {
     const signature = request.headers["x-hub-signature-256"];
@@ -65,10 +61,7 @@ const githubWebhookRoute: FastifyPluginAsync = async (fastify) => {
     if (eventType === "workflow_run" && (payload as unknown as GithubWorkflowRunEvent).action === "completed") {
       const event = payload as unknown as GithubWorkflowRunEvent;
       try {
-        const [repo] = await fastify.db
-          .select()
-          .from(repos)
-          .where(eq(repos.githubRepoId, event.repository.id));
+        const [repo] = await fastify.db.select().from(repos).where(eq(repos.githubRepoId, event.repository.id));
 
         if (!repo) {
           await fastify.db

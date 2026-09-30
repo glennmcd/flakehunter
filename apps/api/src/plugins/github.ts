@@ -1,5 +1,5 @@
-import fp from "fastify-plugin";
 import type { FastifyPluginAsync } from "fastify";
+import fp from "fastify-plugin";
 import { createGithubClient, type GithubClient } from "../github/client.js";
 
 declare module "fastify" {

@@ -9,6 +9,14 @@
     "dev:api": "bun --cwd apps/api run dev",
     "dev:dashboard": "bun --cwd apps/dashboard run dev",
     "db:generate": "bun --cwd apps/api run db:generate",
-    "db:migrate": "bun --cwd apps/api run db:migrate"
+    "db:migrate": "bun --cwd apps/api run db:migrate",
+    "lint": "biome ci .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p apps/dashboard/tsconfig.json",
+    "test": "bun --cwd apps/api test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "typescript": "^5.7.2"
   }
 }

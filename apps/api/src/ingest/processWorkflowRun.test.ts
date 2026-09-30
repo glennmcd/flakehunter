@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { zipSync, strToU8 } from "fflate";
+import { sql } from "drizzle-orm";
+import { strToU8, zipSync } from "fflate";
 import { createTestDb } from "../../test/testDb.js";
 import { repos } from "../db/schema.js";
-import { sql } from "drizzle-orm";
-import { processWorkflowRun } from "./processWorkflowRun.js";
 import type { GithubClient } from "../github/client.js";
+import { processWorkflowRun } from "./processWorkflowRun.js";
 
 const JUNIT_XML = `
   <testsuite name="Suite1">
@@ -81,7 +81,9 @@ describe("processWorkflowRun", () => {
         htmlUrl: null,
       });
 
-      const { rows: flaky } = await db.execute(sql`select classname, name, head_sha, pass_count, fail_count from flaky_tests`);
+      const { rows: flaky } = await db.execute(
+        sql`select classname, name, head_sha, pass_count, fail_count from flaky_tests`,
+      );
       expect(flaky).toHaveLength(1);
       expect(flaky[0]).toMatchObject({
         classname: "pkg.Foo",

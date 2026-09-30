@@ -1,5 +1,5 @@
 import { createDb } from "../apps/api/src/db/client.js";
-import { repos, githubInstallations } from "../apps/api/src/db/schema.js";
+import { githubInstallations, repos } from "../apps/api/src/db/schema.js";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {

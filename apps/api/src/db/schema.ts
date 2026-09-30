@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
   bigserial,
@@ -12,7 +13,6 @@ import {
   timestamp,
   unique,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 export const repos = pgTable("repos", {
   id: bigserial("id", { mode: "number" }).primaryKey(),

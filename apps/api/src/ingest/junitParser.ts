@@ -1,5 +1,5 @@
-import { XMLParser } from "fast-xml-parser";
 import type { TestResultStatus } from "@flakehunter/shared-types";
+import { XMLParser } from "fast-xml-parser";
 
 export interface ParsedTestCase {
   classname: string;
@@ -97,9 +97,7 @@ export function parseJunitXml(xml: string, fileName?: string): ParsedSuite[] {
   collectSuiteNodes(parsed, suiteNodes);
 
   return suiteNodes.map((suiteNode) => {
-    const testCases = Array.isArray(suiteNode.testcase)
-      ? (suiteNode.testcase as RawNode[]).map(parseTestCase)
-      : [];
+    const testCases = Array.isArray(suiteNode.testcase) ? (suiteNode.testcase as RawNode[]).map(parseTestCase) : [];
 
     return {
       suiteName: String(suiteNode.name ?? ""),

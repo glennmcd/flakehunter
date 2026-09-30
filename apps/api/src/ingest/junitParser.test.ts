@@ -23,7 +23,7 @@ describe("parseJunitXml", () => {
     expect(suites[0]?.suiteName).toBe("Suite1");
     expect(suites[0]?.testCases).toHaveLength(4);
 
-    const byName = Object.fromEntries(suites[0]!.testCases.map((tc) => [tc.name, tc]));
+    const byName = Object.fromEntries((suites[0]?.testCases ?? []).map((tc) => [tc.name, tc]));
     expect(byName.passes?.status).toBe("passed");
     expect(byName.fails?.status).toBe("failed");
     expect(byName.fails?.failureMessage).toBe("assertion failed");

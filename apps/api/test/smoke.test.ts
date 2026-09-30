@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { createTestDb } from "./testDb.js";
 import { repos } from "../src/db/schema.js";
+import { createTestDb } from "./testDb.js";
 
 describe("testDb", () => {
   it("applies migrations and allows basic inserts", async () => {
