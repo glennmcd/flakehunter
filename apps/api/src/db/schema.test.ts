@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { createTestDb } from "../../test/testDb.js";
-import { repoApiTokens, repos, reports, workflowRuns } from "./schema.js";
+import { repoApiTokens, reports, repos, workflowRuns } from "./schema.js";
 
 async function seedRun(db: Awaited<ReturnType<typeof createTestDb>>["db"]) {
   const [repo] = await db
@@ -22,7 +22,7 @@ describe("migration 0002 (reports + repo_api_tokens)", () => {
     try {
       const { runId } = await seedRun(db);
       await db.insert(reports).values({ runId, reportKey: "unit" });
-      await expect(db.insert(reports).values({ runId, reportKey: "unit" })).rejects.toThrow();
+      await expect((async () => db.insert(reports).values({ runId, reportKey: "unit" }))()).rejects.toThrow();
     } finally {
       await close();
     }
@@ -57,9 +57,14 @@ describe("migration 0002 (reports + repo_api_tokens)", () => {
     const { db, close } = await createTestDb();
     try {
       const { repoId } = await seedRun(db);
-      const [token] = await db.insert(repoApiTokens).values({ repoId, tokenHash: "h1", prefix: "fh_abcde" }).returning();
+      const [token] = await db
+        .insert(repoApiTokens)
+        .values({ repoId, tokenHash: "h1", prefix: "fh_abcde" })
+        .returning();
       expect(token?.revokedAt).toBeNull();
-      await expect(db.insert(repoApiTokens).values({ repoId, tokenHash: "h1", prefix: "fh_zzzzz" })).rejects.toThrow();
+      await expect(
+        (async () => db.insert(repoApiTokens).values({ repoId, tokenHash: "h1", prefix: "fh_zzzzz" }))(),
+      ).rejects.toThrow();
     } finally {
       await close();
     }
