@@ -1,0 +1,29 @@
+{
+  "name": "@flakehunter/api",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "test": "bun test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun run src/db/migrate.ts"
+  },
+  "dependencies": {
+    "@fastify/autoload": "^6.0.3",
+    "@flakehunter/shared-types": "workspace:*",
+    "@octokit/webhooks": "^13.2.8",
+    "drizzle-orm": "^0.36.4",
+    "fast-xml-parser": "^4.5.0",
+    "fastify": "^5.1.0",
+    "fastify-plugin": "^5.0.1",
+    "fflate": "^0.8.2",
+    "octokit": "^4.0.2",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.2.15",
+    "@types/bun": "^1.1.14",
+    "drizzle-kit": "^0.28.1"
+  }
+}

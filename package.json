@@ -1,0 +1,14 @@
+{
+  "name": "flakehunter",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "bun --cwd apps/api run dev",
+    "dev:dashboard": "bun --cwd apps/dashboard run dev",
+    "db:generate": "bun --cwd apps/api run db:generate",
+    "db:migrate": "bun --cwd apps/api run db:migrate"
+  }
+}
