@@ -57,6 +57,7 @@ export async function seedResult(
     name?: string;
     createdAt?: Date;
     runId?: number;
+    durationSeconds?: number;
     failureMessage?: string;
     failureStack?: string;
   },
@@ -90,6 +91,7 @@ export async function seedResult(
       repoId,
       headSha: input.headSha,
       status: input.status,
+      durationSeconds: input.durationSeconds?.toString(),
       failureMessage: input.failureMessage,
       failureStack: input.failureStack,
       createdAt: input.createdAt,
