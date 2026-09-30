@@ -18,7 +18,9 @@ export function FlakyTestsList() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/repos/${REPO_ID}/flaky-tests`)
+    fetch(`/api/repos/${REPO_ID}/flaky-tests`, {
+      headers: { Authorization: `Bearer ${import.meta.env.VITE_API_TOKEN}` },
+    })
       .then((res) => {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         return res.json();

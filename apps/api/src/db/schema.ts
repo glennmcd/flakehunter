@@ -7,6 +7,7 @@ import {
   jsonb,
   numeric,
   pgTable,
+  pgView,
   text,
   timestamp,
   unique,
@@ -130,3 +131,18 @@ export const testResults = pgTable(
     index("idx_test_results_run").on(table.runId),
   ],
 );
+
+/**
+ * Read-only view created by migration 0001_flaky_tests_view.sql (Drizzle doesn't manage views
+ * via generated migrations). `.existing()` tells drizzle-kit not to try to create/alter it.
+ */
+export const flakyTests = pgView("flaky_tests", {
+  repoId: bigint("repo_id", { mode: "number" }).notNull(),
+  testCaseId: bigint("test_case_id", { mode: "number" }).notNull(),
+  classname: text("classname").notNull(),
+  name: text("name").notNull(),
+  headSha: text("head_sha").notNull(),
+  passCount: bigint("pass_count", { mode: "number" }).notNull(),
+  failCount: bigint("fail_count", { mode: "number" }).notNull(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+}).existing();
