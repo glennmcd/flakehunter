@@ -31,7 +31,7 @@ async function count(db: TestDb, table: string) {
   return (rows[0] as { n: number }).n;
 }
 
-async function expectApiError(promise: Promise<unknown>, code: string) {
+async function expectApiError(promise: Promise<unknown>, code: ApiError["code"]) {
   const err = await promise.then(
     () => null,
     (e: unknown) => e,

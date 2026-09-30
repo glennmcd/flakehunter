@@ -16,7 +16,10 @@ export async function mintRepoToken(db: AnyDb, repoId: number): Promise<{ token:
 }
 
 export async function revokeRepoToken(db: AnyDb, token: string): Promise<void> {
-  await db.update(repoApiTokens).set({ revokedAt: new Date() }).where(eq(repoApiTokens.tokenHash, hashToken(token)));
+  await db
+    .update(repoApiTokens)
+    .set({ revokedAt: new Date() })
+    .where(eq(repoApiTokens.tokenHash, hashToken(token)));
 }
 
 export async function findRepoByToken(db: AnyDb, token: string): Promise<{ id: number; fullName: string } | null> {

@@ -50,7 +50,10 @@ describe("repo API tokens", () => {
 
       await revokeRepoToken(db, token);
       expect(await findRepoByToken(db, token)).toBeNull();
-      const [row] = await db.select().from(repoApiTokens).where(eq(repoApiTokens.tokenHash, hashToken(token)));
+      const [row] = await db
+        .select()
+        .from(repoApiTokens)
+        .where(eq(repoApiTokens.tokenHash, hashToken(token)));
       expect(row?.revokedAt).toBeInstanceOf(Date);
     } finally {
       await close();
