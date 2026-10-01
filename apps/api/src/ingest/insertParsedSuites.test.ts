@@ -57,4 +57,27 @@ describe("insertParsedSuites", () => {
       await close();
     }
   });
+
+  it("stamps suites and results with createdAt when given, and with now otherwise", async () => {
+    const { db, close } = await createTestDb();
+    try {
+      const repo = await seedRepo(db);
+      const run = await seedRun(db, repo.id, { headSha: "abc" });
+      const when = new Date("2026-01-15T10:30:00.000Z");
+
+      await insertParsedSuites(db, { runId: run.id, repoId: repo.id, headSha: "abc", suites: SUITES, createdAt: when });
+      const { rows: stamped } = await db.execute(sql`
+        select (select count(*)::int from test_results where created_at = ${when.toISOString()}::timestamptz) as results,
+               (select count(*)::int from test_suites where created_at = ${when.toISOString()}::timestamptz) as suites`);
+      expect(stamped[0]).toEqual({ results: 4, suites: 2 });
+
+      await insertParsedSuites(db, { runId: run.id, repoId: repo.id, headSha: "abc", suites: SUITES });
+      const { rows: recent } = await db.execute(
+        sql`select count(*)::int as n from test_results where created_at > now() - interval '1 minute'`,
+      );
+      expect(recent[0]).toEqual({ n: 4 });
+    } finally {
+      await close();
+    }
+  });
 });

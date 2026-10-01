@@ -14,6 +14,8 @@ export interface IngestReportInput {
   workflowName: string;
   reportKey: string;
   xml: string;
+  /** When the tests ran. Stamps a newly created run and the results; an existing run row is left as is. */
+  timestamp?: Date;
 }
 
 export interface IngestReportResult {
@@ -56,6 +58,8 @@ export async function ingestReport(db: AnyDb, input: IngestReportInput): Promise
         headSha,
         headBranch: input.headBranch,
         status: "completed",
+        runStartedAt: input.timestamp,
+        createdAt: input.timestamp,
       })
       .onConflictDoNothing()
       .returning();
@@ -119,7 +123,13 @@ export async function ingestReport(db: AnyDb, input: IngestReportInput): Promise
       };
     }
 
-    await insertParsedSuites(tx, { runId: run.id, repoId: input.repoId, headSha, suites });
+    await insertParsedSuites(tx, {
+      runId: run.id,
+      repoId: input.repoId,
+      headSha,
+      suites,
+      createdAt: input.timestamp,
+    });
     return { run: runInfo, duplicate: false, counts };
   });
 }
