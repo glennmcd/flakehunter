@@ -112,12 +112,20 @@ Codes: `validation_error` (400), `unauthorized` (401), `not_found` (404), `paylo
 
 ## Pointing GitHub at FlakeHunter
 
-The API needs to be reachable from GitHub's servers. Locally, use a tunnel (e.g.
-[`cloudflared`](https://github.com/cloudflare/cloudflared): `cloudflared tunnel --url
-http://localhost:3000`, no account needed for a quick tunnel).
+The API needs to be reachable from GitHub's servers. Locally, use a
+[`cloudflared`](https://github.com/cloudflare/cloudflared) quick tunnel (no account needed):
+
+```
+bun run tunnel
+```
+
+This runs `cloudflared tunnel --url http://localhost:3000`, passes its output through, and writes the
+full webhook URL (`<tunnel URL>/webhooks/github`) to `scripts/webhook-url.txt` (git-ignored,
+overwritten each run). Pass another target if needed: `bun run tunnel http://localhost:4000`. The
+hostname changes on every start, so the file is only valid for the tunnel that wrote it.
 
 On the target repo: **Settings → Webhooks → Add webhook**
-- Payload URL: `<your public URL>/webhooks/github`
+- Payload URL: the contents of `scripts/webhook-url.txt`
 - Content type: `application/json`
 - Secret: same value as `GITHUB_WEBHOOK_SECRET`
 - Events: select **Workflow runs** only

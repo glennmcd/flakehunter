@@ -13,7 +13,8 @@
     "lint": "biome ci .",
     "lint:fix": "biome check --write .",
     "typecheck": "tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p apps/dashboard/tsconfig.json",
-    "test": "bun --cwd packages/shared-types test && bun --cwd apps/api test"
+    "test": "bun --cwd packages/shared-types test && bun --cwd apps/api test && bun test scripts",
+    "tunnel": "bun scripts/tunnel.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

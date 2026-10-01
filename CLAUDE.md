@@ -129,9 +129,9 @@ Week-1 bare-bones: a single `FlakyTestsList.tsx` page with `REPO_ID` hardcoded t
 
 - GitHub must reach `/webhooks/github`. Use a quick tunnel:
   ```bash
-  cloudflared tunnel --url http://localhost:3000
+  bun run tunnel
   ```
-  The hostname changes on every start, so update the webhook URL each time (see README).
+  `scripts/tunnel.ts` wraps `cloudflared tunnel --url http://localhost:3000`, passes its output through, and writes `<tunnel URL>/webhooks/github` to the git-ignored `scripts/webhook-url.txt` (overwritten each run; logic and tests in `scripts/tunnel/`). The hostname changes on every start, so update the webhook URL each time (see README).
 - The test fixture repo is `glennmcd/flakehunter-test-fixture`. Its "maybe flaky test" fails about half the time, so re-running `test.yml` on the same commit produces flaky data.
 - On Windows, a background server can keep holding port 3000 after its shell is gone. Find it with `netstat -ano` and stop it with `taskkill //F //PID <pid>`; bash `kill` uses different PIDs.
 
