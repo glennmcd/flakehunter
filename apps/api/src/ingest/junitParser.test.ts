@@ -90,4 +90,58 @@ describe("parseJunitXml", () => {
     expect(suites[0]?.testCases[0]?.status).toBe("failed");
     expect(suites[0]?.testCases[1]?.status).toBe("passed");
   });
+
+  describe("suite-level count attributes", () => {
+    it("reads tests, failures, errors, skipped and time as numbers", () => {
+      const xml = `
+        <testsuite name="Suite1" tests="3" failures="1" errors="0" skipped="2" time="1.5">
+          <testcase classname="pkg.Foo" name="a" />
+        </testsuite>
+      `;
+      expect(parseJunitXml(xml)[0]).toMatchObject({ tests: 3, failures: 1, errors: 0, skipped: 2, timeSeconds: 1.5 });
+    });
+
+    it("reads a skipped attribute of zero as 0, not as missing", () => {
+      const xml = `<testsuite name="S" tests="1" failures="0" errors="0" skipped="0"><testcase classname="c" name="a"/></testsuite>`;
+      expect(parseJunitXml(xml)[0]?.skipped).toBe(0);
+    });
+
+    it("keeps each nested suite's own counts", () => {
+      const xml = `
+        <testsuites>
+          <testsuite name="A" tests="2" failures="0" errors="0" skipped="1">
+            <testcase classname="c" name="x" />
+            <testcase classname="c" name="y"><skipped /></testcase>
+          </testsuite>
+          <testsuite name="B" tests="1" failures="1" errors="0" skipped="0">
+            <testcase classname="c" name="z"><failure message="m" /></testcase>
+          </testsuite>
+        </testsuites>
+      `;
+      const [a, b] = parseJunitXml(xml);
+      expect(a).toMatchObject({ suiteName: "A", tests: 2, failures: 0, skipped: 1 });
+      expect(b).toMatchObject({ suiteName: "B", tests: 1, failures: 1, skipped: 0 });
+    });
+
+    it("leaves a count undefined when the attribute is absent", () => {
+      const suite = parseJunitXml(`<testsuite name="S"><testcase classname="c" name="a"/></testsuite>`)[0];
+      expect(suite?.skipped).toBeUndefined();
+      expect(suite?.failures).toBeUndefined();
+    });
+
+    it("still reports a <skipped/> element as a skipped testcase when the suite also has a skipped attribute", () => {
+      const xml = `
+        <testsuite name="S" tests="2" skipped="1">
+          <testcase classname="c" name="plain" />
+          <testcase classname="c" name="ignored"><skipped message="not today" /></testcase>
+        </testsuite>
+      `;
+      const [suite] = parseJunitXml(xml);
+      expect(suite?.skipped).toBe(1);
+      expect(suite?.testCases.map((t) => [t.name, t.status])).toEqual([
+        ["plain", "passed"],
+        ["ignored", "skipped"],
+      ]);
+    });
+  });
 });

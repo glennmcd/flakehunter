@@ -116,14 +116,8 @@ describe("generateDemoRuns", () => {
           expect(suite.tests).toBe(suite.testCases.length);
           expect(suite.failures).toBe(count("failed"));
           expect(suite.errors).toBe(count("error"));
+          expect(suite.skipped).toBe(count("skipped"));
         }
-        // Checked on the XML text: the API parser currently drops a suite-level `skipped` attribute.
-        const declaredSkipped = [...report.xml.matchAll(/<testsuite [^>]*skipped="(\d+)"/g)].reduce(
-          (sum, m) => sum + Number(m[1]),
-          0,
-        );
-        const actualSkipped = suites.flatMap((s) => s.testCases).filter((t) => t.status === "skipped").length;
-        expect(declaredSkipped).toBe(actualSkipped);
       }
     }
   });
