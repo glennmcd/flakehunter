@@ -48,6 +48,7 @@ TOKEN_REPO_FULL_NAME=<owner>/<repo> bun run --env-file=apps/api/.env scripts/cre
 ## Environment
 
 - `apps/api/.env` holds `DATABASE_URL`, `API_TOKEN`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PAT` and `PORT`. Bun loads `.env` from the current working directory, so scripts run outside `apps/api` need `--env-file=apps/api/.env`.
+- Scripts in `scripts/` run from the repo root, where `drizzle-orm` and other API dependencies are not installed (they live under `apps/api/node_modules`). Import only from `apps/api/src/...` in those scripts, never from `drizzle-orm` directly, or they fail with "module not found". If you need a query, add or reuse a function in `apps/api/src` (e.g. `resolveRepo`).
 - `apps/dashboard/.env` holds `VITE_API_TOKEN`, which must equal `API_TOKEN`.
 - Dev and production use a hosted Neon database. Tests never touch it: they use in-memory PGlite and need no server or network.
 

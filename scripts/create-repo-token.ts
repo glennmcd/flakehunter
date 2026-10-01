@@ -1,7 +1,9 @@
-import { eq } from "drizzle-orm";
+import { ApiError } from "../apps/api/src/api/errors.js";
+import { resolveRepo } from "../apps/api/src/api/resolveRepo.js";
 import { mintRepoToken } from "../apps/api/src/auth/repoToken.js";
 import { createDb } from "../apps/api/src/db/client.js";
-import { repos } from "../apps/api/src/db/schema.js";
+
+// Only import from apps/api/src here: drizzle-orm is installed under apps/api, so a root-level script can't resolve it.
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -15,10 +17,12 @@ if (!fullName) {
 
 const db = createDb(connectionString);
 
-const [repo] = await db.select({ id: repos.id }).from(repos).where(eq(repos.fullName, fullName));
-if (!repo) {
-  throw new Error(`No repo registered as ${fullName}; run scripts/seed-dev-repo.ts first`);
-}
+const repo = await resolveRepo(db, { fullName }).catch((err: unknown) => {
+  if (err instanceof ApiError && err.code === "not_found") {
+    throw new Error(`No repo registered as ${fullName}; run scripts/seed-dev-repo.ts first`);
+  }
+  throw err;
+});
 
 const { token, prefix } = await mintRepoToken(db, repo.id);
 
