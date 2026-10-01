@@ -87,6 +87,7 @@ Use the PR head SHA (as above), not the merge commit, so uploads line up with we
 | `X-FH-Run-Attempt` | no (1) | A re-run is a new attempt, which is what lets a flake show up on one commit |
 | `X-FH-Branch`, `X-FH-Workflow` | no | Stored on the run |
 | `X-FH-Report-Key` | no (`default`) | Distinguishes several reports for one run (e.g. `unit`, `integration`) |
+| `X-FH-Timestamp` | no (now) | When the tests ran, ISO-8601 (not more than 5 minutes in the future). Stamps a new run and its results; use it for late uploads or seeded history |
 
 Re-uploading the same run, attempt and report key is a no-op and returns `200` with the original
 counts; a first upload returns `201`. Bodies up to 11 MB are accepted.
@@ -97,6 +98,7 @@ Read endpoints use the global `API_TOKEN` as the bearer token. `repo` is a numer
 
 | Endpoint | Returns |
 | --- | --- |
+| `GET /api/repos` | Registered repos (`id`, `fullName`, `owner`, `name`), ordered by name |
 | `GET /api/tests/flaky?repo=&since=&minRuns=` | Tests ranked by flake rate: commits where the test both passed and failed, divided by commits it ran on (skipped ignored; `minRuns` defaults to 5) |
 | `GET /api/tests/:id/history?since=&status=` | Newest-first results for one test, with run details |
 | `GET /api/repos/:id/summary?since=` | Totals for the dashboard: runs, tests, results, pass rate, flaky tests and flaky commits |
@@ -110,14 +112,54 @@ Every `/api` error has the same shape:
 Codes: `validation_error` (400), `unauthorized` (401), `not_found` (404), `payload_too_large` (413),
 `invalid_report` (422), `internal_error` (500). `details` appears only on validation errors.
 
+## Demo data
+
+To demo FlakeHunter without wiring up a real repo, generate a fake CI history and upload it through
+the real `POST /api/reports` endpoint. The data is a made-up storefront service with 47 tests: most
+always pass, six are flaky (one only in the last week, one that stopped three weeks ago, two with
+in-suite retries), one was broken until 12 days ago, and two are skipped. Failed runs are usually
+re-run on the same commit, which is what makes flaky tests show up. Runs are spread over the last 30
+days using `X-FH-Timestamp`, so history, `since` filters and trends have something to show.
+
+1. Register the demo repo and mint its upload token (once):
+
+   ```
+   SEED_REPO_OWNER=flakehunter-demo SEED_REPO_NAME=storefront SEED_REPO_GITHUB_ID=900000001 \
+     bun run --env-file=apps/api/.env scripts/seed-dev-repo.ts
+   TOKEN_REPO_FULL_NAME=flakehunter-demo/storefront \
+     bun run --env-file=apps/api/.env scripts/create-repo-token.ts
+   ```
+
+2. Seed it (the API must be running):
+
+   ```
+   DEMO_UPLOAD_TOKEN=<token from above> bun run seed:demo
+   ```
+
+   `DEMO_API_URL` points it at another API (default `http://localhost:3000`), `DEMO_DAYS` sets how
+   far back to go (0 to 365, default 30), and `DEMO_SEED` changes the history (default 42).
+   `bun run seed:demo --dry-run` generates and counts without uploading.
+
+Seeding is safe to repeat: for a seed the runs are deterministic, so a second run reports every
+upload as already present. About 130 uploads are sent, one at a time, and a `429` is waited out and
+retried.
+
 ## Pointing GitHub at FlakeHunter
 
-The API needs to be reachable from GitHub's servers. Locally, use a tunnel (e.g.
-[`cloudflared`](https://github.com/cloudflare/cloudflared): `cloudflared tunnel --url
-http://localhost:3000`, no account needed for a quick tunnel).
+The API needs to be reachable from GitHub's servers. Locally, use a
+[`cloudflared`](https://github.com/cloudflare/cloudflared) quick tunnel (no account needed):
+
+```
+bun run tunnel
+```
+
+This runs `cloudflared tunnel --url http://localhost:3000`, passes its output through, and writes the
+full webhook URL (`<tunnel URL>/webhooks/github`) to `scripts/webhook-url.txt` (git-ignored,
+overwritten each run). Pass another target if needed: `bun run tunnel http://localhost:4000`. The
+hostname changes on every start, so the file is only valid for the tunnel that wrote it.
 
 On the target repo: **Settings → Webhooks → Add webhook**
-- Payload URL: `<your public URL>/webhooks/github`
+- Payload URL: the contents of `scripts/webhook-url.txt`
 - Content type: `application/json`
 - Secret: same value as `GITHUB_WEBHOOK_SECRET`
 - Events: select **Workflow runs** only

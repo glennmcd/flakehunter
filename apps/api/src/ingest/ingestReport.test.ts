@@ -151,6 +151,82 @@ describe("ingestReport", () => {
     }
   });
 
+  describe("timestamp", () => {
+    const when = new Date("2026-01-15T10:30:00.000Z");
+
+    it("stamps the new run and its results with the given time", async () => {
+      const { db, close } = await createTestDb();
+      try {
+        const repo = await seedRepo(db);
+        await ingestReport(db, { repoId: repo.id, ...base, timestamp: when });
+
+        const { rows } = await db.execute(sql`
+          select (select created_at from workflow_runs) as run_created,
+                 (select run_started_at from workflow_runs) as run_started,
+                 (select count(distinct created_at)::int from test_results) as distinct_result_times,
+                 (select created_at from test_results limit 1) as result_created`);
+        const row = rows[0] as Record<string, unknown>;
+        expect(new Date(row.run_created as string).toISOString()).toBe(when.toISOString());
+        expect(new Date(row.run_started as string).toISOString()).toBe(when.toISOString());
+        expect(row.distinct_result_times).toBe(1);
+        expect(new Date(row.result_created as string).toISOString()).toBe(when.toISOString());
+      } finally {
+        await close();
+      }
+    });
+
+    it("uses the current time when no timestamp is given", async () => {
+      const { db, close } = await createTestDb();
+      try {
+        const repo = await seedRepo(db);
+        await ingestReport(db, { repoId: repo.id, ...base });
+        const { rows } = await db.execute(sql`
+          select (select count(*)::int from workflow_runs where created_at > now() - interval '1 minute') as runs,
+                 (select count(*)::int from test_results where created_at > now() - interval '1 minute') as results`);
+        expect(rows[0]).toEqual({ runs: 1, results: 3 });
+      } finally {
+        await close();
+      }
+    });
+
+    it("stamps results but does not rewrite an existing run row", async () => {
+      const { db, close } = await createTestDb();
+      try {
+        const repo = await seedRepo(db);
+        const original = new Date("2026-01-01T00:00:00.000Z");
+        await seedRun(db, repo.id, { githubRunId: 500, headSha: SHA, createdAt: original });
+
+        await ingestReport(db, { repoId: repo.id, ...base, timestamp: when });
+
+        const { rows } = await db.execute(sql`select created_at from workflow_runs`);
+        expect(rows).toHaveLength(1);
+        expect(new Date((rows[0] as { created_at: string }).created_at).toISOString()).toBe(original.toISOString());
+        const { rows: results } = await db.execute(
+          sql`select count(*)::int as n from test_results where created_at = ${when.toISOString()}::timestamptz`,
+        );
+        expect(results[0]).toEqual({ n: 3 });
+      } finally {
+        await close();
+      }
+    });
+
+    it("keeps a duplicate upload a no-op even with a different timestamp", async () => {
+      const { db, close } = await createTestDb();
+      try {
+        const repo = await seedRepo(db);
+        await ingestReport(db, { repoId: repo.id, ...base, timestamp: when });
+        const again = await ingestReport(db, { repoId: repo.id, ...base, timestamp: new Date("2026-02-01T00:00:00Z") });
+
+        expect(again.duplicate).toBe(true);
+        expect(await count(db, "test_results")).toBe(3);
+        const { rows } = await db.execute(sql`select count(distinct created_at)::int as n from test_results`);
+        expect(rows[0]).toEqual({ n: 1 });
+      } finally {
+        await close();
+      }
+    });
+  });
+
   it("rolls back the run and report if inserting results fails midway", async () => {
     const { db, close } = await createTestDb();
     try {

@@ -131,6 +131,27 @@ describe("v1 API, wired through buildApp", () => {
     }
   });
 
+  it("serves GET /api/repos behind the global read token, next to the legacy /repos", async () => {
+    const { close, token, app, read } = await setup();
+    try {
+      expect((await app.inject({ method: "GET", url: "/api/repos" })).statusCode).toBe(401);
+      expect(
+        (await app.inject({ method: "GET", url: "/api/repos", headers: { authorization: `Bearer ${token}` } }))
+          .statusCode,
+      ).toBe(401);
+
+      const res = await app.inject({ method: "GET", url: "/api/repos", headers: read });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().data).toEqual([
+        { id: expect.any(Number), fullName: "acme/widgets", owner: "acme", name: "widgets" },
+      ]);
+      // The legacy unprefixed route still answers.
+      expect((await app.inject({ method: "GET", url: "/repos", headers: read })).statusCode).toBe(200);
+    } finally {
+      await close();
+    }
+  });
+
   it("returns the standard error body for validation errors and unknown routes", async () => {
     const { close, app, read } = await setup();
     try {

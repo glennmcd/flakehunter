@@ -60,6 +60,7 @@ const reportsRoute: FastifyPluginAsync = async (fastify) => {
         workflowName: h["x-fh-workflow"],
         reportKey: h["x-fh-report-key"],
         xml: request.body,
+        timestamp: h["x-fh-timestamp"] ? new Date(h["x-fh-timestamp"]) : undefined,
       });
 
       return reply.code(result.duplicate ? 200 : 201).send(result);

@@ -99,6 +99,49 @@ describe("POST /api/reports", () => {
     }
   });
 
+  it("backdates the run and results when X-FH-Timestamp is given", async () => {
+    const { db, close, token, app } = await setup();
+    try {
+      const when = "2026-01-15T10:30:00.000Z";
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/reports",
+        headers: headers(token, { "x-fh-timestamp": when }),
+        payload: XML,
+      });
+
+      expect(res.statusCode).toBe(201);
+      const { rows } = await db.execute(sql`
+        select (select created_at from workflow_runs) as run_created,
+               (select count(*)::int from test_results where created_at = ${when}::timestamptz) as stamped`);
+      const row = rows[0] as { run_created: string; stamped: number };
+      expect(new Date(row.run_created).toISOString()).toBe(when);
+      expect(row.stamped).toBe(2);
+    } finally {
+      await close();
+    }
+  });
+
+  it("returns 400 for a future or malformed X-FH-Timestamp and writes nothing", async () => {
+    const { db, close, token, app } = await setup();
+    try {
+      for (const ts of ["2999-01-01T00:00:00Z", "yesterday", "2026-01-15"]) {
+        const res = await app.inject({
+          method: "POST",
+          url: "/api/reports",
+          headers: headers(token, { "x-fh-timestamp": ts }),
+          payload: XML,
+        });
+        expect(res.statusCode).toBe(400);
+        expect(res.json().error.code).toBe("validation_error");
+        expect(res.json().error.details[0].path).toBe("headers.x-fh-timestamp");
+      }
+      expect(await count(db, "workflow_runs")).toBe(0);
+    } finally {
+      await close();
+    }
+  });
+
   it("accepts text/xml as well as application/xml", async () => {
     const { close, token, app } = await setup();
     try {

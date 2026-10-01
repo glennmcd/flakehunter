@@ -36,6 +36,34 @@ describe("uploadReportHeadersSchema", () => {
     expect(uploadReportHeadersSchema.safeParse({ "x-fh-sha": "a".repeat(40) }).success).toBe(false);
     expect(uploadReportHeadersSchema.safeParse({ ...base, "x-fh-run-attempt": "0" }).success).toBe(false);
   });
+
+  describe("x-fh-timestamp", () => {
+    const minutesFromNow = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
+
+    it("is optional", () => {
+      expect(uploadReportHeadersSchema.parse(base)["x-fh-timestamp"]).toBeUndefined();
+    });
+
+    it("accepts a past ISO-8601 timestamp, with Z or an offset", () => {
+      for (const ts of ["2026-01-15T10:30:00Z", "2026-01-15T10:30:00.123Z", "2026-01-15T10:30:00+02:00"]) {
+        expect(uploadReportHeadersSchema.parse({ ...base, "x-fh-timestamp": ts })["x-fh-timestamp"]).toBe(ts);
+      }
+    });
+
+    it("accepts a timestamp up to 5 minutes ahead (clock skew) but not further", () => {
+      expect(uploadReportHeadersSchema.safeParse({ ...base, "x-fh-timestamp": minutesFromNow(4) }).success).toBe(true);
+      expect(uploadReportHeadersSchema.safeParse({ ...base, "x-fh-timestamp": minutesFromNow(6) }).success).toBe(false);
+      expect(uploadReportHeadersSchema.safeParse({ ...base, "x-fh-timestamp": "2999-01-01T00:00:00Z" }).success).toBe(
+        false,
+      );
+    });
+
+    it("rejects malformed values", () => {
+      for (const ts of ["yesterday", "2026-01-15", "2026-01-15 10:30:00", "1700000000", ""]) {
+        expect(uploadReportHeadersSchema.safeParse({ ...base, "x-fh-timestamp": ts }).success).toBe(false);
+      }
+    });
+  });
 });
 
 describe("paginationQuerySchema", () => {

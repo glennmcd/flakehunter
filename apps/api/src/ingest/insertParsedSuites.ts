@@ -28,6 +28,8 @@ export interface InsertParsedSuitesInput {
   repoId: number;
   headSha: string;
   suites: ParsedSuite[];
+  /** When the tests ran; defaults to the database's now() when omitted. */
+  createdAt?: Date;
 }
 
 /**
@@ -48,6 +50,7 @@ export async function insertParsedSuites(db: AnyDb, input: InsertParsedSuitesInp
         errors: suite.errors,
         skipped: suite.skipped,
         timeSeconds: suite.timeSeconds?.toString(),
+        createdAt: input.createdAt,
       })
       .returning({ id: testSuites.id });
 
@@ -82,6 +85,7 @@ export async function insertParsedSuites(db: AnyDb, input: InsertParsedSuitesInp
         durationSeconds: tc.durationSeconds?.toString(),
         failureMessage: tc.failureMessage,
         failureStack: tc.failureStack,
+        createdAt: input.createdAt,
       });
     }
   }
