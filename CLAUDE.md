@@ -45,6 +45,13 @@ Minting a per-repo upload token for `POST /api/reports` (printed once; only its 
 TOKEN_REPO_FULL_NAME=<owner>/<repo> bun run --env-file=apps/api/.env scripts/create-repo-token.ts
 ```
 
+Seeding demo data through the real upload endpoint (see README, "Demo data"):
+
+```bash
+DEMO_UPLOAD_TOKEN=<token> bun run seed:demo              # DEMO_API_URL, DEMO_DAYS, DEMO_SEED optional
+bun run seed:demo --dry-run                              # generate and count only
+```
+
 ## Environment
 
 - `apps/api/.env` holds `DATABASE_URL`, `API_TOKEN`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PAT` and `PORT`. Bun loads `.env` from the current working directory, so scripts run outside `apps/api` need `--env-file=apps/api/.env`.
@@ -74,7 +81,7 @@ The ingestion path runs from the webhook route through the `ingest/` modules:
 
 ### Upload path (v1 REST API)
 
-`POST /api/reports` (`routes/api/reports.ts`) takes a raw XML body (`application/xml` or `text/xml`, 11 MB limit) with metadata in headers (`X-FH-Run-Id`, `X-FH-Sha`, optional `X-FH-Run-Attempt`, `X-FH-Branch`, `X-FH-Workflow`, `X-FH-Report-Key`).
+`POST /api/reports` (`routes/api/reports.ts`) takes a raw XML body (`application/xml` or `text/xml`, 11 MB limit) with metadata in headers (`X-FH-Run-Id`, `X-FH-Sha`, optional `X-FH-Run-Attempt`, `X-FH-Branch`, `X-FH-Workflow`, `X-FH-Report-Key`, `X-FH-Timestamp`). `X-FH-Timestamp` (ISO-8601, at most 5 minutes in the future) backdates a new run and its results through `ingestReport`'s `timestamp` and `insertParsedSuites`' `createdAt`; an existing run row keeps its own `created_at`. Without it everything is stamped with the DB's `now()`.
 
 - It authenticates with a per-repo token, not `API_TOKEN`: a route-level `onRequest` hook calls `auth/repoToken.ts` (`findRepoByToken`, sha256 lookup, revocable). The repo comes from the token, never from the request. The hook runs before body parsing and header validation.
 - `ingest/ingestReport.ts` does the work in one transaction. Idempotency is the `reports` table, unique on `(run_id, report_key)`; the run is keyed on `(repo_id, github_run_id, attempt)`. A repeat returns 200 with the original counts (stored on the `reports` row); a first upload returns 201. A SHA that contradicts an existing run is a 400, and an existing run row (e.g. from the webhook) is reused, not overwritten.
@@ -85,6 +92,16 @@ Read endpoints (global `API_TOKEN`), all under `/api`:
 - `GET /api/tests/flaky?repo=&since=&minRuns=` (`flaky/flakeRateQueries.ts`): flake rate = flaky SHAs / SHAs run in the window, skipped results ignored, only tests with at least `minRuns` (default 5) SHAs and one flaky SHA.
 - `GET /api/tests/:id/history` (`history/testHistoryQueries.ts`): newest-first results; never returns `failureStack`.
 - `GET /api/repos/:id/summary` (`summary/repoSummaryQueries.ts`): windowed totals; `lastRunAt` ignores the window.
+- `GET /api/repos` (`repos/repoQueries.ts`): paginated repo list ordered by full name; the web app needs it to find a repo's numeric id.
+
+### Demo data
+
+`scripts/demo/` generates a fake CI history and `scripts/seed-demo.ts` uploads it through `POST /api/reports`:
+
+- `catalog.ts` is the fake service's test list with a behaviour per test (`stable`, `skipped`, `flaky` with probability, in-suite retries and an optional active window, `failing-until` a fix date). `generateRuns.ts` turns it into runs; `junit.ts` builds the XML; `seedDemo.ts` has config parsing, the HTTP uploader and the retrying seeder.
+- The generator is pure and deterministic. Every random draw comes from a PRNG keyed on (seed, calendar day, commit, attempt), never the clock, and windows like "flaky only in the last 7 days" count whole UTC calendar days. Regenerating later therefore reproduces earlier runs exactly, so re-seeding returns `200` duplicates. Run ids embed the seed, so a new `DEMO_SEED` is new data.
+- These files import only node built-ins (root scripts cannot resolve API dependencies). Tests may import from `apps/api`: `seed.e2e.test.ts` uploads the full history through `buildApp()` over PGlite and checks the API's flaky ranking and summary against what the generator produced.
+- The API's JUnit parser currently ignores a suite-level `skipped` attribute (it clashes with the `<skipped>` element name), so the generator tests check that count on the XML text.
 
 `perShaCte` in `flaky/flakeRateQueries.ts` is the single definition of "flaky SHA" for the ranking and the summary. The older `flaky_tests` view still backs the week-1 `/repos/:id/flaky-tests` routes, which are unchanged.
 
