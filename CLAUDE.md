@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-FlakeHunter ingests JUnit XML reports from GitHub Actions, stores them in Postgres, and flags a test as flaky when it has both a pass and a fail (or error) on the same commit SHA, regardless of which workflow or job produced the results. It is a Bun workspaces monorepo: `apps/api` (Fastify), `apps/dashboard` (Vite + React), `packages/shared-types`.
+FlakeHunter ingests JUnit XML reports from GitHub Actions, stores them in Postgres, and flags a test as flaky when it has both a pass and a fail (or error) on the same commit SHA, regardless of which workflow or job produced the results. It is a Bun workspaces monorepo: `apps/api` (Fastify), `apps/dashboard` (the original Vite + React page, on the week-1 routes), `apps/web` (the Next.js dashboard), `packages/shared-types`.
 
 ## Commands
 
@@ -14,15 +14,17 @@ From the repo root:
 bun install
 bun run dev:api          # Fastify on :3000 (watch mode)
 bun run dev:dashboard    # Vite on :5173, proxies /api -> :3000
+bun run dev:web          # Next.js (apps/web); needs apps/web/.env.local, see .env.example
+bun run build:web        # Next.js production build (CI runs it)
 bun run db:migrate       # apply migrations to DATABASE_URL (Neon)
 bun run db:generate      # generate a migration from schema.ts changes
 bun run lint             # Biome: lint, format check, import order (fails on any diff)
 bun run lint:fix         # apply Biome's safe fixes
-bun run typecheck        # tsc --noEmit for api and dashboard
-bun run test             # shared-types tests, then all api tests
+bun run typecheck        # tsc --noEmit for api, dashboard and web (web runs `next typegen` first)
+bun run test             # shared-types, api, web, then scripts tests
 ```
 
-CI (`.github/workflows/ci.yml`) runs `lint`, `typecheck` and `test` on every PR and every push to `main`. Biome config is in `biome.json`: 2-space indent, double quotes, 120-character lines.
+CI (`.github/workflows/ci.yml`) runs `lint`, `typecheck`, `test` and `build:web` on every PR and every push to `main`. Biome config is in `biome.json`: 2-space indent, double quotes, 120-character lines.
 
 To run a subset of tests, use `bun test` with a path or name. The test DB helper resolves migrations relative to its own file, so the working directory does not matter (this also holds when debugging):
 
@@ -101,7 +103,6 @@ Read endpoints (global `API_TOKEN`), all under `/api`:
 - `catalog.ts` is the fake service's test list with a behaviour per test (`stable`, `skipped`, `flaky` with probability, in-suite retries and an optional active window, `failing-until` a fix date). `generateRuns.ts` turns it into runs; `junit.ts` builds the XML; `seedDemo.ts` has config parsing, the HTTP uploader and the retrying seeder.
 - The generator is pure and deterministic. Every random draw comes from a PRNG keyed on (seed, calendar day, commit, attempt), never the clock, and windows like "flaky only in the last 7 days" count whole UTC calendar days. Regenerating later therefore reproduces earlier runs exactly, so re-seeding returns `200` duplicates. Run ids embed the seed, so a new `DEMO_SEED` is new data.
 - These files import only node built-ins (root scripts cannot resolve API dependencies). Tests may import from `apps/api`: `seed.e2e.test.ts` uploads the full history through `buildApp()` over PGlite and checks the API's flaky ranking and summary against what the generator produced.
-- The API's JUnit parser currently ignores a suite-level `skipped` attribute (it clashes with the `<skipped>` element name), so the generator tests check that count on the XML text.
 
 `perShaCte` in `flaky/flakeRateQueries.ts` is the single definition of "flaky SHA" for the ranking and the summary. The older `flaky_tests` view still backs the week-1 `/repos/:id/flaky-tests` routes, which are unchanged.
 
@@ -138,9 +139,21 @@ Test identity is `classname + name`, scoped per repo. Duplicate names within one
 - With PGlite, `db.execute(sql...)` returns `{ rows }`, not an array. Because the shapes differ per driver, production query code uses the Drizzle query builder (including `$with` CTEs); raw `execute` is only for assertions in tests.
 - `test/fixtures.ts` has `seedRepo`, `seedRun` and `seedResult` (creates the test case, run and suite for you), plus `daysAgo` and `sha`. `test/apiApp.ts` builds a small app for route tests. Assert HTTP bodies with `res.json<unknown>()` when passing them straight to `toEqual`, or the types collapse to `undefined`.
 
-### Dashboard
+### Dashboards
 
-Week-1 bare-bones: a single `FlakyTestsList.tsx` page with `REPO_ID` hardcoded to `1`. It defines its own `FlakyTest` type rather than importing `@flakehunter/shared-types`.
+`apps/dashboard` is week-1 bare-bones: a single `FlakyTestsList.tsx` page with `REPO_ID` hardcoded, on the week-1 routes through a Vite proxy that strips `/api`. It defines its own `FlakyTest` type rather than importing `@flakehunter/shared-types`. It is being superseded by `apps/web` and is otherwise left alone.
+
+### Web app (`apps/web`)
+
+Next.js (App Router, currently 16.x with Turbopack) and React 19. Server Components call the API with the server-only `API_TOKEN`, so no token or CORS is involved in the browser.
+
+- **Env:** `lib/env.ts` (`loadEnv`) validates `API_BASE_URL`, `API_TOKEN` and `SITE_PASSWORD` with Zod. Its errors name variables but never values. Never prefix these with `NEXT_PUBLIC_`.
+- **Shared schemas:** the web app imports Zod schemas from `@flakehunter/shared-types` (`transpilePackages` in `next.config.ts`, since the package ships TypeScript source). Turbopack cannot resolve `./x.js` specifiers to `.ts` files, so imports inside `packages/shared-types/src` are extensionless (`from "./common"`). Do not add `.js` suffixes there; the build breaks as soon as a page imports the package.
+- **Imports in `apps/web`:** extensionless, like shared-types (the `.js` suffix convention is for the Node-style apps).
+- **Pages are dynamic:** pages `export const dynamic = "force-dynamic"` because they read live API data, so `next build` makes no API calls and CI needs no secrets.
+- **Types:** `next-env.d.ts` and `.next/` are git-ignored; `bun run typecheck` runs `next typegen` first to generate them. TypeScript comes from the repo root (5.x); do not add a separate `typescript` to `apps/web`.
+- **Tests:** `bun test` with `react-dom/server`'s `renderToStaticMarkup` for components, no DOM library; pure helpers get plain unit tests. Pages themselves are covered by `next build` in CI plus a manual browser check.
+- **Next 16 note:** the `middleware` file convention has a successor named `proxy` (both names exist in the installed package); read `node_modules/next/dist/docs` before adding the password gate.
 
 ## Local webhook testing
 

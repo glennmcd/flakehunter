@@ -8,12 +8,14 @@
   "scripts": {
     "dev:api": "bun run --cwd apps/api dev",
     "dev:dashboard": "bun run --cwd apps/dashboard dev",
+    "dev:web": "bun run --cwd apps/web dev",
+    "build:web": "bun run --cwd apps/web build",
     "db:generate": "bun run --cwd apps/api db:generate",
     "db:migrate": "bun run --cwd apps/api db:migrate",
     "lint": "biome ci .",
     "lint:fix": "biome check --write .",
-    "typecheck": "tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p apps/dashboard/tsconfig.json",
-    "test": "bun --cwd packages/shared-types test && bun --cwd apps/api test && bun test scripts",
+    "typecheck": "tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p apps/dashboard/tsconfig.json && bun run --cwd apps/web typecheck",
+    "test": "bun --cwd packages/shared-types test && bun --cwd apps/api test && bun --cwd apps/web test && bun test scripts",
     "tunnel": "bun scripts/tunnel.ts",
     "seed:demo": "bun scripts/seed-demo.ts"
   },

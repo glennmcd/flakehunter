@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { paginationQuerySchema } from "./common.js";
-import { uploadReportHeadersSchema } from "./reports.js";
-import { flakyTestsQuerySchema, repoRefSchema } from "./tests.js";
+import { paginationQuerySchema } from "./common";
+import { uploadReportHeadersSchema } from "./reports";
+import { flakyTestsQuerySchema, repoRefSchema } from "./tests";
 
 describe("repoRefSchema", () => {
   it("parses a numeric id", () => {

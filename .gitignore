@@ -3,5 +3,9 @@ dist/
 .env
 *.log
 .DS_Store
+# Next.js (apps/web): build output and the types file `next typegen` writes
+.next/
+next-env.d.ts
+*.tsbuildinfo
 # Written by scripts/tunnel.ts
 scripts/webhook-url.txt

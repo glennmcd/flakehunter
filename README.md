@@ -34,6 +34,23 @@ dev/prod, PGlite for tests). See `.claude/plans` (or ask for a copy) for the ful
    bun run dev:dashboard
    ```
 
+## Web dashboard (`apps/web`)
+
+A Next.js app (App Router) that reads from the API server-side, so the API token never reaches the
+browser. It is being built up over several changes; today it is a scaffold with typed config.
+
+1. Copy `apps/web/.env.example` to `apps/web/.env.local` and set:
+   - `API_BASE_URL`: where the API runs (default `http://localhost:3000`)
+   - `API_TOKEN`: the API's read token (the same value as `API_TOKEN` in `apps/api/.env`)
+   - `SITE_PASSWORD`: password for the site-wide gate; leave empty to disable it locally
+2. With the API running, start it:
+   ```
+   bun run dev:web
+   ```
+
+`bun run build:web` makes a production build (CI runs it). The older Vite dashboard in
+`apps/dashboard` still exists and is untouched.
+
 ## Registering a repo
 
 FlakeHunter needs a `repos` row before it will ingest anything from a given GitHub repo. Seed one

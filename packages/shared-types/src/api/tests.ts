@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { pageSchema, paginationQuerySchema, testStatusSchema } from "./common.js";
+import { pageSchema, paginationQuerySchema, testStatusSchema } from "./common";
 
 export const repoRefSchema = z
   .string()
