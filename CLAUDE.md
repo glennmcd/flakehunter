@@ -153,7 +153,8 @@ Next.js (App Router, currently 16.x with Turbopack) and React 19. Server Compone
 - **Pages are dynamic:** pages `export const dynamic = "force-dynamic"` because they read live API data, so `next build` makes no API calls and CI needs no secrets.
 - **Types:** `next-env.d.ts` and `.next/` are git-ignored; `bun run typecheck` runs `next typegen` first to generate them. TypeScript comes from the repo root (5.x); do not add a separate `typescript` to `apps/web`.
 - **Tests:** `bun test` with `react-dom/server`'s `renderToStaticMarkup` for components, no DOM library; pure helpers get plain unit tests. Pages themselves are covered by `next build` in CI plus a manual browser check.
-- **Next 16 note:** the `middleware` file convention has a successor named `proxy` (both names exist in the installed package); read `node_modules/next/dist/docs` before adding the password gate.
+- **Password gate:** `src/proxy.ts` is Next 16's `proxy` (the renamed `middleware`; docs in `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md`). It runs on the Node.js runtime with no `matcher`, so it covers every request including `/_next/static`; do not add a matcher that exempts paths. The logic is pure and tested in `lib/basicAuth.ts` (`checkBasicAuth`: constant-time compare of the password only, username ignored; `gateDecision`). With `SITE_PASSWORD` set it is enforced in every environment; unset, it is open only when `NODE_ENV` is `development` or `test`, and otherwise returns 503 (fail closed). It reads `process.env` directly, not `loadEnv`, so a missing API variable cannot disable it.
+- **No generated agent files:** `next dev` would write `AGENTS.md` and `CLAUDE.md` into `apps/web`; `agentRules: false` in `next.config.ts` turns that off. Keep it off so this root file stays the single source.
 
 ## Local webhook testing
 

@@ -48,6 +48,12 @@ browser. It is being built up over several changes; today it is a scaffold with 
    bun run dev:web
    ```
 
+**Site password.** When `SITE_PASSWORD` is set, every page and asset is behind HTTP Basic auth: the
+browser prompts once, and you can enter any username with the password. When it is unset the site
+is open in development, but a production build **refuses to serve (503)** rather than going public
+by accident. Basic auth sends the password with every request, so only expose the site over HTTPS
+(Vercel does this for you).
+
 `bun run build:web` makes a production build (CI runs it). The older Vite dashboard in
 `apps/dashboard` still exists and is untouched.
 
