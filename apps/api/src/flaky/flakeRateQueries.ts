@@ -12,14 +12,12 @@ export interface FlakeRankingQuery {
 }
 
 /**
- * Builds the two CTEs behind the ranking. Built with the query builder rather than raw SQL so the same code
- * runs on postgres-js and PGlite (db.execute returns different shapes on each).
- *
- * per_sha:  one row per (test, commit) in the window, skipped results ignored, flagged when that commit saw
- *           both a pass and a failure/error.
- * per_test: rolls per_sha up per test; keeps tests that ran on at least `minRuns` commits and were flaky on one.
+ * per_sha CTE: one row per (test, commit) in the window, skipped results ignored, flagged when that commit saw
+ * both a pass and a failure/error. Shared by the flaky ranking and the repo summary so "flaky" means one thing.
+ * Built with the query builder rather than raw SQL so it runs on postgres-js and PGlite (db.execute returns
+ * different shapes on each).
  */
-function flakeCtes(db: AnyDb, { repoId, since, minRuns }: Pick<FlakeRankingQuery, "repoId" | "since" | "minRuns">) {
+export function perShaCte(db: AnyDb, { repoId, since }: { repoId: number; since: Date }) {
   const perSha = db.$with("per_sha").as(
     db
       .select({
@@ -33,8 +31,16 @@ function flakeCtes(db: AnyDb, { repoId, since, minRuns }: Pick<FlakeRankingQuery
       .where(and(eq(testResults.repoId, repoId), gte(testResults.createdAt, since), ne(testResults.status, "skipped")))
       .groupBy(testResults.testCaseId, testResults.headSha),
   );
-
   const isFlaky = sql`(${perSha.hasPass} and ${perSha.hasFail})`;
+  return { perSha, isFlaky };
+}
+
+/**
+ * per_test CTE: rolls per_sha up per test; keeps tests that ran on at least `minRuns` commits and were flaky
+ * on at least one.
+ */
+function flakeCtes(db: AnyDb, { repoId, since, minRuns }: Pick<FlakeRankingQuery, "repoId" | "since" | "minRuns">) {
+  const { perSha, isFlaky } = perShaCte(db, { repoId, since });
 
   const perTest = db.$with("per_test").as(
     db
