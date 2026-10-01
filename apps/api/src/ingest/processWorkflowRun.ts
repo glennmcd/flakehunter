@@ -1,10 +1,14 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { AnyDb } from "../db/client.js";
-import { testCases, testResults, testSuites, workflowRuns } from "../db/schema.js";
+import { reports, workflowRuns } from "../db/schema.js";
 import { downloadArtifactZip, listRunArtifacts } from "../github/artifacts.js";
 import type { GithubClient } from "../github/client.js";
+import { insertParsedSuites, summarizeSuites } from "./insertParsedSuites.js";
 import { parseJunitXml } from "./junitParser.js";
 import { extractXmlFiles } from "./zipExtract.js";
+
+/** Report key used for results ingested from a GitHub artifact, so uploads can use their own keys. */
+export const WEBHOOK_REPORT_KEY = "webhook-artifact";
 
 export interface WorkflowRunInput {
   repoId: number;
@@ -50,6 +54,10 @@ export async function processWorkflowRun(db: AnyDb, github: GithubClient, input:
 
   if (!run) throw new Error("Failed to upsert workflow_runs row");
 
+  // An upload (or an earlier delivery of this webhook) already ingested results for this run.
+  const [existingReport] = await db.select({ id: reports.id }).from(reports).where(eq(reports.runId, run.id)).limit(1);
+  if (existingReport) return;
+
   const artifacts = await listRunArtifacts(github, {
     owner: input.owner,
     repo: input.repo,
@@ -58,7 +66,7 @@ export async function processWorkflowRun(db: AnyDb, github: GithubClient, input:
 
   const artifact = artifacts[0];
   if (!artifact) {
-    await db.update(workflowRuns).set({ artifactsFetchedAt: sql`now()` }).where(sql`${workflowRuns.id} = ${run.id}`);
+    await db.update(workflowRuns).set({ artifactsFetchedAt: sql`now()` }).where(eq(workflowRuns.id, run.id));
     return;
   }
 
@@ -68,61 +76,31 @@ export async function processWorkflowRun(db: AnyDb, github: GithubClient, input:
     artifactId: artifact.id,
   });
 
-  const xmlFiles = extractXmlFiles(new Uint8Array(zipBuffer));
+  const suites = extractXmlFiles(new Uint8Array(zipBuffer)).flatMap((xmlFile) =>
+    parseJunitXml(xmlFile.contents, xmlFile.fileName),
+  );
+  const counts = summarizeSuites(suites);
 
-  for (const xmlFile of xmlFiles) {
-    const suites = parseJunitXml(xmlFile.contents, xmlFile.fileName);
+  await db.transaction(async (tx) => {
+    const [report] = await tx
+      .insert(reports)
+      .values({
+        runId: run.id,
+        reportKey: WEBHOOK_REPORT_KEY,
+        suiteCount: counts.suites,
+        testCount: counts.tests,
+        passedCount: counts.passed,
+        failedCount: counts.failed,
+        errorCount: counts.error,
+        skippedCount: counts.skipped,
+      })
+      .onConflictDoNothing()
+      .returning({ id: reports.id });
 
-    for (const suite of suites) {
-      const [suiteRow] = await db
-        .insert(testSuites)
-        .values({
-          runId: run.id,
-          suiteName: suite.suiteName,
-          fileName: suite.fileName,
-          tests: suite.tests,
-          failures: suite.failures,
-          errors: suite.errors,
-          skipped: suite.skipped,
-          timeSeconds: suite.timeSeconds?.toString(),
-        })
-        .returning({ id: testSuites.id });
+    // Lost a race with a concurrent delivery or upload: their results stand, ours are dropped.
+    if (!report) return;
 
-      if (!suiteRow) throw new Error("Failed to insert test_suites row");
-
-      const occurrenceCounts = new Map<string, number>();
-
-      for (const tc of suite.testCases) {
-        const key = `${tc.classname}::${tc.name}`;
-        const occurrenceIndex = occurrenceCounts.get(key) ?? 0;
-        occurrenceCounts.set(key, occurrenceIndex + 1);
-
-        const [testCaseRow] = await db
-          .insert(testCases)
-          .values({ repoId: input.repoId, classname: tc.classname, name: tc.name })
-          .onConflictDoUpdate({
-            target: [testCases.repoId, testCases.classname, testCases.name],
-            set: { classname: sql`excluded.classname` },
-          })
-          .returning({ id: testCases.id });
-
-        if (!testCaseRow) throw new Error("Failed to upsert test_cases row");
-
-        await db.insert(testResults).values({
-          testCaseId: testCaseRow.id,
-          suiteId: suiteRow.id,
-          runId: run.id,
-          repoId: input.repoId,
-          headSha: input.headSha,
-          occurrenceIndex,
-          status: tc.status,
-          durationSeconds: tc.durationSeconds?.toString(),
-          failureMessage: tc.failureMessage,
-          failureStack: tc.failureStack,
-        });
-      }
-    }
-  }
-
-  await db.update(workflowRuns).set({ artifactsFetchedAt: sql`now()` }).where(sql`${workflowRuns.id} = ${run.id}`);
+    await insertParsedSuites(tx, { runId: run.id, repoId: input.repoId, headSha: input.headSha, suites });
+    await tx.update(workflowRuns).set({ artifactsFetchedAt: sql`now()` }).where(eq(workflowRuns.id, run.id));
+  });
 }

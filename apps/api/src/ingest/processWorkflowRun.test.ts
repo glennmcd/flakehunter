@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { sql } from "drizzle-orm";
 import { strToU8, zipSync } from "fflate";
 import { createTestDb } from "../../test/testDb.js";
-import { repos } from "../db/schema.js";
+import { reports, repos, workflowRuns } from "../db/schema.js";
 import type { GithubClient } from "../github/client.js";
 import { processWorkflowRun } from "./processWorkflowRun.js";
 
@@ -95,5 +95,85 @@ describe("processWorkflowRun", () => {
     } finally {
       await close();
     }
+  });
+
+  describe("idempotency", () => {
+    const baseInput = {
+      owner: "acme",
+      repo: "widgets",
+      githubRunId: 200,
+      githubRunAttempt: 1,
+      workflowName: "CI",
+      headSha: "def456",
+      headBranch: "main",
+      status: "completed",
+      conclusion: "success",
+      runStartedAt: null,
+      runCompletedAt: null,
+      htmlUrl: null,
+    };
+
+    async function seedRepo(db: Awaited<ReturnType<typeof createTestDb>>["db"]) {
+      const [repo] = await db
+        .insert(repos)
+        .values({ githubRepoId: 1, owner: "acme", name: "widgets", fullName: "acme/widgets" })
+        .returning({ id: repos.id });
+      if (!repo) throw new Error("failed to seed repo");
+      return repo.id;
+    }
+
+    it("does not double count when the same run is processed twice (webhook redelivery)", async () => {
+      const { db, close } = await createTestDb();
+      try {
+        const repoId = await seedRepo(db);
+        const client = fakeGithubClient(zipSync({ "junit.xml": strToU8(JUNIT_XML) }));
+
+        await processWorkflowRun(db, client, { ...baseInput, repoId });
+        await processWorkflowRun(db, client, { ...baseInput, repoId });
+
+        const { rows } = await db.execute(sql`select count(*)::int as n from test_results`);
+        expect(rows[0]).toMatchObject({ n: 1 });
+        const { rows: suites } = await db.execute(sql`select count(*)::int as n from test_suites`);
+        expect(suites[0]).toMatchObject({ n: 1 });
+      } finally {
+        await close();
+      }
+    });
+
+    it("skips artifact ingestion when an upload already recorded a report for the run", async () => {
+      const { db, close } = await createTestDb();
+      try {
+        const repoId = await seedRepo(db);
+        const [run] = await db
+          .insert(workflowRuns)
+          .values({
+            repoId,
+            githubRunId: baseInput.githubRunId,
+            githubRunAttempt: 1,
+            workflowName: "upload",
+            headSha: baseInput.headSha,
+            status: "completed",
+          })
+          .returning({ id: workflowRuns.id });
+        if (!run) throw new Error("failed to seed run");
+        await db.insert(reports).values({ runId: run.id, reportKey: "default" });
+
+        let downloads = 0;
+        const client = fakeGithubClient(zipSync({ "junit.xml": strToU8(JUNIT_XML) }));
+        const original = client.rest.actions.downloadArtifact;
+        client.rest.actions.downloadArtifact = (async (...args: Parameters<typeof original>) => {
+          downloads++;
+          return original(...args);
+        }) as typeof original;
+
+        await processWorkflowRun(db, client, { ...baseInput, repoId });
+
+        expect(downloads).toBe(0);
+        const { rows } = await db.execute(sql`select count(*)::int as n from test_results`);
+        expect(rows[0]).toMatchObject({ n: 0 });
+      } finally {
+        await close();
+      }
+    });
   });
 });

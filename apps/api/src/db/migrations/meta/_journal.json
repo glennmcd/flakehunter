@@ -15,6 +15,13 @@
       "when": 1790726959226,
       "tag": "0001_flaky_tests_view",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790789662919,
+      "tag": "0002_reports_and_repo_tokens",
+      "breakpoints": true
     }
   ]
 }
