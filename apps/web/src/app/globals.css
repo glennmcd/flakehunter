@@ -7,6 +7,9 @@
   --accent: #b45309;
   --accent-soft: #fef3c7;
   --danger: #b91c1c;
+  --ok: #15803d;
+  --error: #7e22ce;
+  --skip: #78716c;
   --radius: 8px;
   color-scheme: light dark;
 }
@@ -21,6 +24,9 @@
     --accent: #f59e0b;
     --accent-soft: #451a03;
     --danger: #f87171;
+    --ok: #4ade80;
+    --error: #c084fc;
+    --skip: #a8a29e;
   }
 }
 
@@ -279,4 +285,114 @@ button {
   .bar {
     width: 3.5rem;
   }
+}
+
+select {
+  padding: 0.3rem 0.5rem;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.chart {
+  margin: 0 0 2rem;
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.chart > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.lane {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.lane-label,
+.tick {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.mark-passed {
+  fill: var(--ok);
+}
+
+.mark-failed {
+  fill: var(--danger);
+}
+
+.mark-error {
+  fill: var(--error);
+}
+
+.mark-skipped {
+  fill: none;
+  stroke: var(--skip);
+  stroke-width: 1.5;
+}
+
+.flaky-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 2;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.legend svg {
+  vertical-align: middle;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.tag {
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.failure {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+}
+
+.failure pre {
+  max-width: 28rem;
+  margin: 0.35rem 0 0;
+  padding: 0.5rem;
+  overflow-x: auto;
+  background: var(--bg);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
 }
