@@ -25,7 +25,10 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
   parseAttributeValue: true,
-  isArray: (tagName) => ["testsuite", "testcase", "failure", "error", "skipped"].includes(tagName),
+  // The callback is also called for attributes. A suite's `skipped="2"` count shares its name with the <skipped>
+  // element, so without the isAttribute check it would be wrapped in an array and read back as undefined.
+  isArray: (tagName, _jPath, _isLeafNode, isAttribute) =>
+    !isAttribute && ["testsuite", "testcase", "failure", "error", "skipped"].includes(tagName),
 });
 
 interface RawNode {

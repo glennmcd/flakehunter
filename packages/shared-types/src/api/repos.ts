@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { pageSchema, paginationQuerySchema } from "./common.js";
+import { pageSchema, paginationQuerySchema } from "./common";
 
 export const reposQuerySchema = paginationQuerySchema;
 

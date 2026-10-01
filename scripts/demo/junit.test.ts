@@ -63,11 +63,8 @@ describe("buildJunitXml", () => {
   it("carries durations and per-suite counts", () => {
     const [suite] = parseJunitXml(xml);
     expect(suite?.testCases[0]?.durationSeconds).toBe(0.123);
-    expect(suite).toMatchObject({ tests: 4, failures: 1, errors: 1 });
+    expect(suite).toMatchObject({ tests: 4, failures: 1, errors: 1, skipped: 1 });
     expect(suite?.timeSeconds).toBeCloseTo(1.623, 5);
-    // Checked on the XML text: the API parser currently drops a suite-level `skipped` attribute (it shares its
-    // name with the <skipped> element, which the parser forces into an array).
-    expect(xml).toContain('tests="4" failures="1" errors="1" skipped="1"');
   });
 
   it("starts with an XML declaration", () => {

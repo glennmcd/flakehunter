@@ -25,3 +25,8 @@ jobs:
       - run: bun run typecheck
       # Tests use in-memory PGlite and a faked GitHub client, so no secrets or database are needed.
       - run: bun run test
+      # Pages are all dynamic, so the build needs no API or secrets; it proves the web app and the shared
+      # schema package compile together.
+      - run: bun run build:web
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"

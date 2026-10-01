@@ -34,6 +34,33 @@ dev/prod, PGlite for tests). See `.claude/plans` (or ask for a copy) for the ful
    bun run dev:dashboard
    ```
 
+## Web dashboard (`apps/web`)
+
+A Next.js app (App Router) that reads from the API server-side, so the API token never reaches the
+browser. Pages: `/` (repository list; goes straight to the repo when there is only one, `/?list=1` always lists),
+`/repos/<id>` (summary and flakiest tests, with 7/30/90-day window, minimum-commits filter and paging) and
+`/repos/<id>/tests/<id>` (result timeline and history for one test).
+
+1. Copy `apps/web/.env.example` to `apps/web/.env.local` and set:
+   - `API_BASE_URL`: where the API runs (default `http://localhost:3000`)
+   - `API_TOKEN`: the API's read token (the same value as `API_TOKEN` in `apps/api/.env`)
+   - `SITE_PASSWORD`: password for the site-wide gate; leave empty to disable it locally
+2. With the API running, start it:
+   ```
+   bun run dev:web
+   ```
+   It serves on <http://localhost:3001> (the API uses 3000), so the demo repo is at
+   <http://localhost:3001/repos/3>.
+
+**Site password.** When `SITE_PASSWORD` is set, every page and asset is behind HTTP Basic auth: the
+browser prompts once, and you can enter any username with the password. When it is unset the site
+is open in development, but a production build **refuses to serve (503)** rather than going public
+by accident. Basic auth sends the password with every request, so only expose the site over HTTPS
+(Vercel does this for you).
+
+`bun run build:web` makes a production build (CI runs it). The older Vite dashboard in
+`apps/dashboard` still exists and is untouched.
+
 ## Registering a repo
 
 FlakeHunter needs a `repos` row before it will ingest anything from a given GitHub repo. Seed one
