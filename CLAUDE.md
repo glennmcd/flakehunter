@@ -14,7 +14,7 @@ From the repo root:
 bun install
 bun run dev:api          # Fastify on :3000 (watch mode)
 bun run dev:dashboard    # Vite on :5173, proxies /api -> :3000
-bun run dev:web          # Next.js (apps/web); needs apps/web/.env.local, see .env.example
+bun run dev:web          # Next.js on :3001 (apps/web); needs apps/web/.env.local, see .env.example
 bun run build:web        # Next.js production build (CI runs it)
 bun run db:migrate       # apply migrations to DATABASE_URL (Neon)
 bun run db:generate      # generate a migration from schema.ts changes

@@ -47,6 +47,8 @@ browser. It is being built up over several changes; today it is a scaffold with 
    ```
    bun run dev:web
    ```
+   It serves on <http://localhost:3001> (the API uses 3000), so the demo repo is at
+   <http://localhost:3001/repos/3>.
 
 **Site password.** When `SITE_PASSWORD` is set, every page and asset is behind HTTP Basic auth: the
 browser prompts once, and you can enter any username with the password. When it is unset the site
