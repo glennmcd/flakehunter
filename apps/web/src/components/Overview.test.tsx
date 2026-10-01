@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { FlakyTestItem, RepoSummaryResponse } from "@flakehunter/shared-types";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DEFAULT_PARAMS } from "../lib/overview";
-import { EmptyFlakyTests, ErrorState, FlakeRateBar, FlakyTable, Overview, Pagination, SummaryCards } from "./Overview";
+import { EmptyFlakyTests, ErrorState, FlakeRateBar, FlakyTable, Overview, Pagination, SummaryStats } from "./Overview";
 
 const now = new Date("2026-03-31T12:00:00.000Z");
 
@@ -24,8 +24,8 @@ const row = (over: Partial<FlakyTestItem> = {}): FlakyTestItem => ({
   ...over,
 });
 
-describe("SummaryCards", () => {
-  const html = renderToStaticMarkup(<SummaryCards summary={summary} now={now} />);
+describe("SummaryStats", () => {
+  const html = renderToStaticMarkup(<SummaryStats summary={summary} now={now} />);
 
   it("shows every total with a label", () => {
     for (const text of ["Runs", "89", "Tests", "47", "Pass rate", "97.3%", "Flaky tests", "Flaky commits", "31"]) {
@@ -36,7 +36,7 @@ describe("SummaryCards", () => {
 
   it("shows a dash when there is no pass rate or last run", () => {
     const empty = renderToStaticMarkup(
-      <SummaryCards
+      <SummaryStats
         summary={{ ...summary, lastRunAt: null, totals: { ...summary.totals, passRate: null } }}
         now={now}
       />,

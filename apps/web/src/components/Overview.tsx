@@ -10,23 +10,26 @@ import {
   WINDOW_OPTIONS,
 } from "../lib/overview";
 
-export function SummaryCards({ summary, now }: { summary: RepoSummaryResponse; now?: Date }) {
+export function SummaryStats({ summary, now }: { summary: RepoSummaryResponse; now?: Date }) {
   const { totals } = summary;
-  const cards: { label: string; value: string; hint?: string }[] = [
+  const stats: { label: string; value: string; title?: string; flaky?: boolean }[] = [
     { label: "Runs", value: totals.runs.toLocaleString("en-US") },
     { label: "Tests", value: totals.tests.toLocaleString("en-US") },
-    { label: "Pass rate", value: formatPercent(totals.passRate), hint: "passed / (passed + failed)" },
-    { label: "Flaky tests", value: totals.flakyTests.toLocaleString("en-US") },
-    { label: "Flaky commits", value: totals.flakyShas.toLocaleString("en-US") },
-    { label: "Last run", value: formatRelativeTime(summary.lastRunAt, now), hint: "any time, not just this window" },
+    { label: "Pass rate", value: formatPercent(totals.passRate), title: "passed / (passed + failed)" },
+    { label: "Flaky tests", value: totals.flakyTests.toLocaleString("en-US"), flaky: totals.flakyTests > 0 },
+    { label: "Flaky commits", value: totals.flakyShas.toLocaleString("en-US"), flaky: totals.flakyShas > 0 },
+    {
+      label: "Last run",
+      value: formatRelativeTime(summary.lastRunAt, now),
+      title: "Latest run, even outside this window",
+    },
   ];
   return (
-    <dl className="cards" aria-label="Repository summary">
-      {cards.map((card) => (
-        <div className="card" key={card.label}>
-          <dt>{card.label}</dt>
-          <dd>{card.value}</dd>
-          {card.hint ? <span className="hint">{card.hint}</span> : null}
+    <dl className="stats" aria-label="Repository summary">
+      {stats.map((stat) => (
+        <div className={stat.flaky ? "stat stat-flaky" : "stat"} key={stat.label} title={stat.title}>
+          <dt>{stat.label}</dt>
+          <dd>{stat.value}</dd>
         </div>
       ))}
     </dl>
@@ -72,41 +75,44 @@ export function FlakeRateBar({ rate }: { rate: number }) {
 
 export function FlakyTable({ repoId, rows, now }: { repoId: number; rows: FlakyTestItem[]; now?: Date }) {
   return (
-    <table className="data">
-      <caption className="visually-hidden">Flakiest tests, highest flake rate first</caption>
-      <thead>
-        <tr>
-          <th scope="col">Test</th>
-          <th scope="col">Flake rate</th>
-          <th scope="col" className="num">
-            Flaky / run
-          </th>
-          <th scope="col">Last flaky</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.testId}>
-            <th scope="row">
-              <Link href={`/repos/${repoId}/tests/${row.testId}`}>
-                <span className="test-name">{row.name}</span>
-                <span className="test-class">{row.classname}</span>
-              </Link>
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: a horizontally scrollable region must be keyboard focusable
+    <section className="table-scroll" aria-label="Flakiest tests" tabIndex={0}>
+      <table className="data">
+        <caption className="visually-hidden">Flakiest tests, highest flake rate first</caption>
+        <thead>
+          <tr>
+            <th scope="col">Test</th>
+            <th scope="col">Flake rate</th>
+            <th scope="col" className="num">
+              Flaky / run
             </th>
-            <td>
-              <FlakeRateBar rate={row.flakeRate} />
-              <span className="rate">{formatPercent(row.flakeRate)}</span>
-            </td>
-            <td className="num">
-              {row.flakyShas} / {row.shasRun}
-            </td>
-            <td>
-              <time dateTime={row.lastFlakyAt}>{formatRelativeTime(row.lastFlakyAt, now)}</time>
-            </td>
+            <th scope="col">Last flaky</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.testId}>
+              <th scope="row">
+                <Link className="row-link" href={`/repos/${repoId}/tests/${row.testId}`}>
+                  <span className="test-name">{row.name}</span>
+                  <span className="test-class">{row.classname}</span>
+                </Link>
+              </th>
+              <td className="rate-cell">
+                <FlakeRateBar rate={row.flakeRate} />
+                <span className="rate">{formatPercent(row.flakeRate)}</span>
+              </td>
+              <td className="num">
+                {row.flakyShas} / {row.shasRun}
+              </td>
+              <td>
+                <time dateTime={row.lastFlakyAt}>{formatRelativeTime(row.lastFlakyAt, now)}</time>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
 
@@ -151,12 +157,12 @@ export function Overview({ repoId, params, summary, flaky, now }: OverviewProps)
     <main>
       <header className="page-header">
         <p className="breadcrumb">
-          <Link href="/">Repositories</Link>
+          <Link href="/?list=1">Repositories</Link>
         </p>
         <h1>{summary.repo.fullName}</h1>
         <WindowSelector repoId={repoId} params={params} />
       </header>
-      <SummaryCards summary={summary} now={now} />
+      <SummaryStats summary={summary} now={now} />
       <section aria-labelledby="flaky-heading">
         <div className="section-head">
           <h2 id="flaky-heading">Flakiest tests</h2>

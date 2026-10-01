@@ -82,59 +82,62 @@ export function HistoryTable({
   now?: Date;
 }) {
   return (
-    <table className="data">
-      <caption className="visually-hidden">Results for this test, newest first</caption>
-      <thead>
-        <tr>
-          <th scope="col">Status</th>
-          <th scope="col">Commit</th>
-          <th scope="col">Run</th>
-          <th scope="col">When</th>
-          <th scope="col" className="num">
-            Duration
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((item) => {
-          const url = safeHttpUrl(item.run.htmlUrl);
-          const runLabel = `${item.run.workflowName} #${item.run.githubRunId}, attempt ${item.run.attempt}`;
-          return (
-            <tr key={item.resultId}>
-              <td>
-                <StatusBadge status={item.status} />
-                {item.failureMessage ? (
-                  <details className="failure">
-                    <summary>Failure message</summary>
-                    <pre>{item.failureMessage}</pre>
-                  </details>
-                ) : null}
-              </td>
-              <td>
-                <code title={item.headSha}>{shortSha(item.headSha)}</code>
-                {flaky.has(item.headSha) ? <span className="tag">flaky commit</span> : null}
-                {item.headBranch ? <span className="test-class">{item.headBranch}</span> : null}
-              </td>
-              <td>
-                {url ? (
-                  <a href={url} target="_blank" rel="noopener noreferrer">
-                    {runLabel}
-                  </a>
-                ) : (
-                  runLabel
-                )}
-              </td>
-              <td>
-                <time dateTime={item.createdAt} title={formatDateTime(item.createdAt)}>
-                  {formatRelativeTime(item.createdAt, now)}
-                </time>
-              </td>
-              <td className="num">{formatDuration(item.durationSeconds)}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: a horizontally scrollable region must be keyboard focusable
+    <section className="table-scroll" aria-label="Results" tabIndex={0}>
+      <table className="data data-wide">
+        <caption className="visually-hidden">Results for this test, newest first</caption>
+        <thead>
+          <tr>
+            <th scope="col">Status</th>
+            <th scope="col">Commit</th>
+            <th scope="col">Run</th>
+            <th scope="col">When</th>
+            <th scope="col" className="num">
+              Duration
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => {
+            const url = safeHttpUrl(item.run.htmlUrl);
+            const runLabel = `${item.run.workflowName} #${item.run.githubRunId}, attempt ${item.run.attempt}`;
+            return (
+              <tr key={item.resultId}>
+                <td>
+                  <StatusBadge status={item.status} />
+                  {item.failureMessage ? (
+                    <details className="failure">
+                      <summary>Failure message</summary>
+                      <pre>{item.failureMessage}</pre>
+                    </details>
+                  ) : null}
+                </td>
+                <td>
+                  <code title={item.headSha}>{shortSha(item.headSha)}</code>
+                  {flaky.has(item.headSha) ? <span className="tag">flaky commit</span> : null}
+                  {item.headBranch ? <span className="test-class">{item.headBranch}</span> : null}
+                </td>
+                <td>
+                  {url ? (
+                    <a href={url} target="_blank" rel="noopener noreferrer">
+                      {runLabel}
+                    </a>
+                  ) : (
+                    runLabel
+                  )}
+                </td>
+                <td>
+                  <time dateTime={item.createdAt} title={formatDateTime(item.createdAt)}>
+                    {formatRelativeTime(item.createdAt, now)}
+                  </time>
+                </td>
+                <td className="num">{formatDuration(item.durationSeconds)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </section>
   );
 }
 
@@ -183,7 +186,7 @@ export function TestDetail({ repoId, test, params, chart, table, now }: TestDeta
     <main>
       <header className="page-header">
         <p className="breadcrumb">
-          <Link href="/">Repositories</Link> / <Link href={`/repos/${repoId}`}>Repository overview</Link>
+          <Link href="/?list=1">Repositories</Link> / <Link href={`/repos/${repoId}`}>Repository overview</Link>
         </p>
         <h1>{test.name}</h1>
         <p className="test-class">{test.classname}</p>

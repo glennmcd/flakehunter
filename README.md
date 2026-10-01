@@ -37,7 +37,9 @@ dev/prod, PGlite for tests). See `.claude/plans` (or ask for a copy) for the ful
 ## Web dashboard (`apps/web`)
 
 A Next.js app (App Router) that reads from the API server-side, so the API token never reaches the
-browser. It is being built up over several changes; today it is a scaffold with typed config.
+browser. Pages: `/` (repository list; goes straight to the repo when there is only one, `/?list=1` always lists),
+`/repos/<id>` (summary and flakiest tests, with 7/30/90-day window, minimum-commits filter and paging) and
+`/repos/<id>/tests/<id>` (result timeline and history for one test).
 
 1. Copy `apps/web/.env.example` to `apps/web/.env.local` and set:
    - `API_BASE_URL`: where the API runs (default `http://localhost:3000`)
