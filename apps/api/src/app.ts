@@ -5,12 +5,15 @@ import authPlugin from "./plugins/auth.js";
 import dbPlugin from "./plugins/db.js";
 import errorHandlerPlugin from "./plugins/errorHandler.js";
 import githubPlugin from "./plugins/github.js";
+import rateLimitPlugin, { type RateLimitPluginOptions } from "./plugins/rateLimit.js";
 import { registerRoutes } from "./routes/index.js";
 
 export interface BuildAppOptions {
   /** Use this database instead of connecting to DATABASE_URL (tests pass a PGlite instance). */
   db?: AnyDb;
   logger?: boolean;
+  /** Override the upload rate limit (tests); by default it comes from the environment. */
+  rateLimit?: RateLimitPluginOptions;
 }
 
 export async function buildApp(options: BuildAppOptions = {}) {
@@ -28,6 +31,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   }
   await fastify.register(authPlugin);
   await fastify.register(githubPlugin);
+  await fastify.register(rateLimitPlugin, options.rateLimit ?? {});
   await registerRoutes(fastify);
 
   return fastify;

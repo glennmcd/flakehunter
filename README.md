@@ -144,7 +144,7 @@ Every `/api` error has the same shape:
 ```
 
 Codes: `validation_error` (400), `unauthorized` (401), `not_found` (404), `payload_too_large` (413),
-`invalid_report` (422), `internal_error` (500). `details` appears only on validation errors.
+`invalid_report` (422), `rate_limited` (429, with `Retry-After`), `internal_error` (500). `details` appears only on validation errors.
 
 ## Demo data
 
