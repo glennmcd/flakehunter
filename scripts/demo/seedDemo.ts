@@ -1,3 +1,4 @@
+import { gzipSync } from "node:zlib";
 import { DEFAULT_DEMO_SEED, type DemoRun } from "./generateRuns.js";
 
 // Uploads generated demo runs through POST /api/reports. Only node built-ins and global fetch are used, because
@@ -73,11 +74,18 @@ export function uploadHeaders(request: UploadRequest, token: string): Record<str
   };
 }
 
-/** An uploader that POSTs to a running API over HTTP. */
+/**
+ * An uploader that POSTs to a running API over HTTP. The XML is sent gzip-compressed: reports compress about tenfold,
+ * which keeps large histories under the request size limit of an API behind AWS Lambda.
+ */
 export function httpUploader(baseUrl: string, token: string, fetchFn: typeof fetch = fetch): Uploader {
   const url = `${baseUrl.replace(/\/+$/, "")}/api/reports`;
   return async (request) => {
-    const response = await fetchFn(url, { method: "POST", headers: uploadHeaders(request, token), body: request.xml });
+    const response = await fetchFn(url, {
+      method: "POST",
+      headers: { ...uploadHeaders(request, token), "content-encoding": "gzip" },
+      body: new Uint8Array(gzipSync(request.xml)),
+    });
     const retryAfter = response.headers.get("retry-after");
     return {
       status: response.status,

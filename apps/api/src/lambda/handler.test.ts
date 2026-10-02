@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { createHmac } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import type { Context } from "aws-lambda";
 import { seedRepo } from "../../test/fixtures.js";
 import { createTestDb } from "../../test/testDb.js";
@@ -140,6 +141,36 @@ describe("Lambda handler", () => {
       const b64 = await upload(2, { body: Buffer.from(XML).toString("base64"), base64: true });
       expect(b64.statusCode).toBe(201);
       expect(b64.json()).toMatchObject({ duplicate: false });
+    } finally {
+      await close();
+    }
+  });
+
+  it("ingests a gzip upload that API Gateway delivers as a base64 body, and rejects a bomb", async () => {
+    const { call, token, close } = await setup();
+    const upload = (runId: number, payload: Buffer) =>
+      call(
+        event({
+          method: "POST",
+          path: "/api/reports",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/xml",
+            "content-encoding": "gzip",
+            "x-fh-run-id": String(runId),
+            "x-fh-sha": SHA,
+          },
+          body: payload.toString("base64"),
+          base64: true,
+        }),
+      );
+    try {
+      const ok = await upload(1, gzipSync(XML));
+      expect(ok.statusCode).toBe(201);
+      expect(ok.json()).toMatchObject({ duplicate: false, counts: { tests: 1, passed: 1 } });
+
+      const bomb = await upload(2, gzipSync(Buffer.alloc(12 * 1024 * 1024, "a")));
+      expect(bomb.statusCode).toBe(413);
     } finally {
       await close();
     }

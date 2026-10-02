@@ -91,15 +91,16 @@ Upload from a GitHub Actions step, after your tests have written `junit.xml`:
 - name: Upload test report to FlakeHunter
   if: always()
   run: |
-    curl --fail-with-body -X POST "$FLAKEHUNTER_URL/api/reports" \
+    gzip -c junit.xml | curl --fail-with-body -X POST "$FLAKEHUNTER_URL/api/reports" \
       -H "Authorization: Bearer $FLAKEHUNTER_TOKEN" \
       -H "Content-Type: application/xml" \
+      -H "Content-Encoding: gzip" \
       -H "X-FH-Run-Id: ${{ github.run_id }}" \
       -H "X-FH-Run-Attempt: ${{ github.run_attempt }}" \
       -H "X-FH-Sha: ${{ github.event.pull_request.head.sha || github.sha }}" \
       -H "X-FH-Branch: ${{ github.head_ref || github.ref_name }}" \
       -H "X-FH-Workflow: ${{ github.workflow }}" \
-      --data-binary @junit.xml
+      --data-binary @-
   env:
     FLAKEHUNTER_URL: https://your-flakehunter-host
     FLAKEHUNTER_TOKEN: ${{ secrets.FLAKEHUNTER_TOKEN }}
@@ -117,7 +118,13 @@ Use the PR head SHA (as above), not the merge commit, so uploads line up with we
 | `X-FH-Timestamp` | no (now) | When the tests ran, ISO-8601 (not more than 5 minutes in the future). Stamps a new run and its results; use it for late uploads or seeded history |
 
 Re-uploading the same run, attempt and report key is a no-op and returns `200` with the original
-counts; a first upload returns `201`. Bodies up to 11 MB are accepted.
+counts; a first upload returns `201`.
+
+**Body size.** The XML may be up to 11 MB, measured after decompression. Send it gzip-compressed with
+`Content-Encoding: gzip` (as above; reports shrink about tenfold). This matters when the API runs behind AWS
+Lambda, which rejects any request body over about 6 MB (about 4.5 MB of raw data after base64), so an uncompressed
+report above that size never reaches the API. `gzip` is the only encoding accepted; others get a `400`, and gzip
+data that expands past 11 MB gets a `413`.
 
 Read endpoints use the global `API_TOKEN` as the bearer token. `repo` is a numeric id or
 `owner/name`; `since` is an ISO-8601 timestamp (default: 30 days ago). List endpoints take

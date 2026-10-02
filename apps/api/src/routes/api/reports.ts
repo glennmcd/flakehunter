@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { ApiError } from "../../api/errors.js";
 import { findRepoByToken } from "../../auth/repoToken.js";
+import { gzipPreParsing } from "../../http/gzipBody.js";
 import { ingestReport } from "../../ingest/ingestReport.js";
 
 const MAX_REPORT_BYTES = 11 * 1024 * 1024;
@@ -34,6 +35,8 @@ const reportsRoute: FastifyPluginAsync = async (fastify) => {
         if (!repo) throw new ApiError("unauthorized", "Missing or invalid repo API token");
         request.repo = repo;
       },
+      // Accepts Content-Encoding: gzip (the decompressed size is capped too); runs after the token check above.
+      preParsing: gzipPreParsing(MAX_REPORT_BYTES),
       schema: {
         headers: uploadReportHeadersSchema,
         response: { 200: uploadReportResponseSchema, 201: uploadReportResponseSchema },
