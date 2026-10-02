@@ -12,15 +12,22 @@ const REGION = "us-east-2";
 
 // Every stack these tests need is synthesized in one Node process (see synth-worker.ts for why not in Bun); the
 // assertions below then run against the resulting CloudFormation templates.
-const SCENARIOS: Record<string, ApiStackProps> = {
-  defaults: {},
-  custom: { parameterPrefix: "/fh/prod/", uploadRateLimit: { max: 5, windowSeconds: 10 } },
-  concurrency: { reservedConcurrency: 5 },
-  throttle: { throttle: { rateLimit: 5, burstLimit: 10 } },
-  budget: { alertEmail: "me@example.com", monthlyBudgetUsd: 25 },
-  budgetDefault: { alertEmail: "me@example.com" },
-  badPrefixNoLeadingSlash: { parameterPrefix: "flakehunter/demo/" },
-  badPrefixNoTrailingSlash: { parameterPrefix: "/flakehunter/demo" },
+const api = (props: ApiStackProps) => ({ stack: "api", props });
+const web = (props: object) => ({ stack: "web", props });
+const SCENARIOS: Record<string, { stack: string; props: object }> = {
+  defaults: api({}),
+  custom: api({ parameterPrefix: "/fh/prod/", uploadRateLimit: { max: 5, windowSeconds: 10 } }),
+  concurrency: api({ reservedConcurrency: 5 }),
+  throttle: api({ throttle: { rateLimit: 5, burstLimit: 10 } }),
+  budget: api({ alertEmail: "me@example.com", monthlyBudgetUsd: 25 }),
+  budgetDefault: api({ alertEmail: "me@example.com" }),
+  badPrefixNoLeadingSlash: api({ parameterPrefix: "flakehunter/demo/" }),
+  badPrefixNoTrailingSlash: api({ parameterPrefix: "/flakehunter/demo" }),
+  webDefaults: web({}),
+  webConnected: web({
+    repository: "https://github.com/glennmcd/flakehunter",
+    githubTokenSecretName: "flakehunter/github-token",
+  }),
 };
 
 interface Scenario {
@@ -231,6 +238,98 @@ describe("ApiStack cost budget", () => {
     template.resourceCountIs("AWS::Budgets::Budget", 0);
     expect(warnings.some((w) => w.includes("alertEmail"))).toBe(true);
     expect(scenario("budget").warnings.some((w) => w.includes("alertEmail"))).toBe(false);
+  });
+});
+
+describe("WebStack Amplify app", () => {
+  const app = (name: string) =>
+    Object.values(scenario(name).template.findResources("AWS::Amplify::App"))[0] as {
+      Properties: Record<string, unknown> & { EnvironmentVariables: { Name: string; Value: unknown }[] };
+    };
+  const envVar = (name: string, variable: string) =>
+    app(name).Properties.EnvironmentVariables.find((v) => v.Name === variable);
+
+  it("is a compute-platform app, so Next.js server rendering runs", () => {
+    scenario("webConnected").template.hasResourceProperties("AWS::Amplify::App", {
+      Name: "flakehunter-web",
+      Platform: "WEB_COMPUTE",
+    });
+  });
+
+  it("builds the monorepo's apps/web with Bun, filtering out the other workspaces", () => {
+    const spec = String(app("webConnected").Properties.BuildSpec);
+    expect(spec).toContain("appRoot: apps/web");
+    expect(spec).toContain(
+      'bun install --frozen-lockfile --filter "@flakehunter/web" --filter "@flakehunter/shared-types"',
+    );
+    expect(spec).toContain("bun run build");
+    expect(spec).toContain("baseDirectory: .next");
+    expect(envVar("webConnected", "AMPLIFY_MONOREPO_APP_ROOT")?.Value).toBe("apps/web");
+  });
+
+  it("writes the three variables the dashboard reads into .env.production for the server runtime", () => {
+    const spec = String(app("webConnected").Properties.BuildSpec);
+    for (const name of ["API_BASE_URL", "API_TOKEN", "SITE_PASSWORD"]) {
+      expect(spec).toContain(`echo "${name}=$${name}" >> .env.production`);
+      expect(envVar("webConnected", name)).toBeDefined();
+    }
+  });
+
+  it("points API_BASE_URL at the API and takes the two secrets from NoEcho parameters", () => {
+    expect(envVar("webConnected", "API_BASE_URL")?.Value).toBe("https://api.example.com");
+    expect(envVar("webConnected", "API_TOKEN")?.Value).toEqual({ Ref: "ApiToken" });
+    expect(envVar("webConnected", "SITE_PASSWORD")?.Value).toEqual({ Ref: "SitePassword" });
+    const { template } = scenario("webConnected");
+    template.hasParameter("ApiToken", { Type: "String", NoEcho: true });
+    template.hasParameter("SitePassword", { Type: "String", NoEcho: true, MinLength: 8 });
+  });
+
+  it("never exposes a variable with the NEXT_PUBLIC_ prefix, which would put it in the browser bundle", () => {
+    for (const variable of app("webConnected").Properties.EnvironmentVariables) {
+      expect(variable.Name.startsWith("NEXT_PUBLIC_")).toBe(false);
+    }
+  });
+
+  it("connects to GitHub through a Secrets Manager dynamic reference, never a literal token", () => {
+    const properties = app("webConnected").Properties;
+    expect(properties.Repository).toBe("https://github.com/glennmcd/flakehunter");
+    expect(String(properties.AccessToken)).toContain("{{resolve:secretsmanager:flakehunter/github-token");
+    expect(String(properties.AccessToken)).not.toMatch(/gh[pousr]_|github_pat_/);
+  });
+
+  it("serves the main branch as production with automatic builds when connected", () => {
+    scenario("webConnected").template.hasResourceProperties("AWS::Amplify::Branch", {
+      BranchName: "main",
+      Stage: "PRODUCTION",
+      Framework: "Next.js - SSR",
+      EnableAutoBuild: true,
+    });
+  });
+
+  it("is created unconnected, without auto builds, and warns, when no repository is given", () => {
+    const { template, warnings } = scenario("webDefaults");
+    const properties = app("webDefaults").Properties;
+    expect(properties).not.toHaveProperty("Repository");
+    expect(properties).not.toHaveProperty("AccessToken");
+    template.hasResourceProperties("AWS::Amplify::Branch", { EnableAutoBuild: false });
+    expect(warnings.some((w) => w.includes("not connected to GitHub"))).toBe(true);
+    expect(scenario("webConnected").warnings).toEqual([]);
+  });
+
+  it("outputs the app id and the site URL", () => {
+    const { template } = scenario("webConnected");
+    template.hasOutput("AmplifyAppId", { Value: Match.anyValue() });
+    template.hasOutput("SiteUrl", { Value: Match.anyValue() });
+  });
+
+  it("uses the same package names and Bun version as the repository, so the build spec cannot drift", () => {
+    const read = (file: string) => readFileSync(path.join(here, "../..", file), "utf8");
+    const spec = String(app("webConnected").Properties.BuildSpec);
+    expect(JSON.parse(read("apps/web/package.json")).name).toBe("@flakehunter/web");
+    expect(JSON.parse(read("packages/shared-types/package.json")).name).toBe("@flakehunter/shared-types");
+    expect(JSON.parse(read("apps/web/package.json")).scripts.build).toBeDefined();
+    const ciBun = /bun-version:\s*([\d.]+)/.exec(read(".github/workflows/ci.yml"))?.[1];
+    expect(spec).toContain(`bun@${ciBun}`);
   });
 });
 
