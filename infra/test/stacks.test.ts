@@ -174,8 +174,9 @@ describe("ApiStack HTTP API", () => {
     expect(api?.Properties).not.toHaveProperty("CorsConfiguration");
   });
 
-  it("outputs the API URL for the dashboard's API_BASE_URL", () => {
+  it("outputs the API URL for the dashboard's API_BASE_URL, and the function name for aws lambda commands", () => {
     scenario("defaults").template.hasOutput("ApiUrl", { Value: Match.anyValue() });
+    scenario("defaults").template.hasOutput("FunctionName", { Value: Match.anyValue() });
   });
 });
 

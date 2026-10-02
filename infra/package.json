@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "synth": "cdk synth",
-    "diff": "cdk diff",
+    "cdk": "node node_modules/aws-cdk/bin/cdk",
+    "synth": "node node_modules/aws-cdk/bin/cdk synth",
+    "diff": "node node_modules/aws-cdk/bin/cdk diff",
     "test": "bun test"
   },
   "dependencies": {

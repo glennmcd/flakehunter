@@ -140,6 +140,10 @@ export class ApiStack extends Stack {
     }
 
     new CfnOutput(this, "ApiUrl", { value: httpApi.apiEndpoint, description: "API_BASE_URL for the dashboard" });
+    new CfnOutput(this, "FunctionName", {
+      value: this.apiFunction.functionName,
+      description: "For aws lambda commands",
+    });
     new CfnOutput(this, "RateLimitTableName", { value: this.rateLimitTable.tableName });
     new CfnOutput(this, "ParameterPrefix", {
       value: prefix,
