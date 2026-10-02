@@ -10,7 +10,6 @@
     "db:migrate": "bun run src/db/migrate.ts"
   },
   "dependencies": {
-    "@fastify/autoload": "^6.0.3",
     "@flakehunter/shared-types": "workspace:*",
     "@octokit/webhooks": "^13.2.8",
     "drizzle-orm": "^0.36.4",

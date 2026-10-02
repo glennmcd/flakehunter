@@ -13,7 +13,6 @@
       "name": "@flakehunter/api",
       "version": "0.0.1",
       "dependencies": {
-        "@fastify/autoload": "^6.0.3",
         "@flakehunter/shared-types": "workspace:*",
         "@octokit/webhooks": "^13.2.8",
         "drizzle-orm": "^0.36.4",
@@ -186,8 +185,6 @@
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.19.12", "", { "os": "win32", "cpu": "x64" }, "sha512-T1QyPSDCyMXaO3pzBkF96E8xMkiRYbUEZADd29SyPGabqxMViNoii+NcK7eWJAEoU6RZyEm5lVSIjTmcdoB9HA=="],
 
     "@fastify/ajv-compiler": ["@fastify/ajv-compiler@4.0.6", "", { "dependencies": { "ajv": "^8.12.0", "ajv-formats": "^3.0.1", "fast-uri": "^4.0.0" } }, "sha512-NtuzM0SfaMJbGlnjr9LWQUN5LzgSrbB8tf/wRZNas+4E1O/Nmzl53e7ruT61HDZyRCJGC6FxIogmNZO1c5ETBA=="],
-
-    "@fastify/autoload": ["@fastify/autoload@6.5.0", "", {}, "sha512-JkjNcIia6PW1EhHLhAbI4vR6sO++8dW7hBwkcZ/p3ewBTQzrjyPXvQ0ChaUpkd+3/wNqg7W6GLsc0Az+KpW0Qw=="],
 
     "@fastify/error": ["@fastify/error@4.2.0", "", {}, "sha512-RSo3sVDXfHskiBZKBPRgnQTtIqpi/7zhJOEmAxCiBcM7d0uwdGdxLlsCaLzGs8v8NnxIRlfG0N51p5yFaOentQ=="],
 

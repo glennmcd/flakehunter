@@ -6,7 +6,7 @@ import type { TestDb } from "./testDb.js";
 
 /**
  * Minimal app for route tests: zod compilers, the standard error handler and a PGlite db, with each route
- * plugin mounted under /api like @fastify/autoload does for routes/api/. The global Bearer auth hook is
+ * plugin mounted under /api, as routes/index.ts does for routes/api/. The global Bearer auth hook is
  * intentionally not registered; it is covered in plugins/auth.test.ts.
  */
 export async function buildApiApp(db: TestDb, routes: FastifyPluginAsync[]) {
