@@ -1,10 +1,11 @@
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { dbOptionsFor } from "./options.js";
 import * as schema from "./schema.js";
 
-export function createDb(connectionString: string) {
-  const client = postgres(connectionString);
+export function createDb(connectionString: string, env: Record<string, string | undefined> = process.env) {
+  const client = postgres(connectionString, dbOptionsFor(connectionString, env));
   return drizzle(client, { schema });
 }
 
