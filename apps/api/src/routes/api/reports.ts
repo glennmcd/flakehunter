@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { ApiError } from "../../api/errors.js";
 import { findRepoByToken } from "../../auth/repoToken.js";
+import { gzipPreParsing } from "../../http/gzipBody.js";
 import { ingestReport } from "../../ingest/ingestReport.js";
 
 const MAX_REPORT_BYTES = 11 * 1024 * 1024;
@@ -27,13 +28,19 @@ const reportsRoute: FastifyPluginAsync = async (fastify) => {
     "/reports",
     {
       bodyLimit: MAX_REPORT_BYTES,
-      // Runs before body parsing and validation, so unauthenticated callers never reach either.
-      onRequest: async (request) => {
-        const match = /^Bearer (.+)$/.exec(request.headers.authorization ?? "");
-        const repo = match?.[1] ? await findRepoByToken(fastify.db, match[1]) : null;
-        if (!repo) throw new ApiError("unauthorized", "Missing or invalid repo API token");
-        request.repo = repo;
-      },
+      // Both run before body parsing and validation, so rejected callers never reach either. The rate limit comes
+      // first so that a flood of bad tokens is stopped before it costs a database lookup each.
+      onRequest: [
+        ...(fastify.hasDecorator("uploadRateLimit") ? [fastify.uploadRateLimit] : []),
+        async (request) => {
+          const match = /^Bearer (.+)$/.exec(request.headers.authorization ?? "");
+          const repo = match?.[1] ? await findRepoByToken(fastify.db, match[1]) : null;
+          if (!repo) throw new ApiError("unauthorized", "Missing or invalid repo API token");
+          request.repo = repo;
+        },
+      ],
+      // Accepts Content-Encoding: gzip (the decompressed size is capped too); runs after the token check above.
+      preParsing: gzipPreParsing(MAX_REPORT_BYTES),
       schema: {
         headers: uploadReportHeadersSchema,
         response: { 200: uploadReportResponseSchema, 201: uploadReportResponseSchema },

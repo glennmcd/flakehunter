@@ -1,6 +1,3 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import autoload from "@fastify/autoload";
 import Fastify from "fastify";
 import { serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
 import type { AnyDb, Db } from "./db/client.js";
@@ -8,13 +5,15 @@ import authPlugin from "./plugins/auth.js";
 import dbPlugin from "./plugins/db.js";
 import errorHandlerPlugin from "./plugins/errorHandler.js";
 import githubPlugin from "./plugins/github.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import rateLimitPlugin, { type RateLimitPluginOptions } from "./plugins/rateLimit.js";
+import { registerRoutes } from "./routes/index.js";
 
 export interface BuildAppOptions {
   /** Use this database instead of connecting to DATABASE_URL (tests pass a PGlite instance). */
   db?: AnyDb;
   logger?: boolean;
+  /** Override the upload rate limit (tests); by default it comes from the environment. */
+  rateLimit?: RateLimitPluginOptions;
 }
 
 export async function buildApp(options: BuildAppOptions = {}) {
@@ -32,11 +31,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   }
   await fastify.register(authPlugin);
   await fastify.register(githubPlugin);
-  await fastify.register(autoload, {
-    dir: path.join(__dirname, "routes"),
-    // Tests live next to the routes and must not be loaded as route plugins.
-    ignorePattern: /\.test\.[cm]?[jt]s$/,
-  });
+  await fastify.register(rateLimitPlugin, options.rateLimit ?? {});
+  await registerRoutes(fastify);
 
   return fastify;
 }

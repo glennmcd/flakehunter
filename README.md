@@ -4,8 +4,9 @@ Ingests JUnit XML test reports from GitHub Actions, stores results in Postgres, 
 test as flaky when it has both a pass and a fail result on the same commit SHA — regardless of
 which workflow or job produced the result.
 
-Stack: Fastify API (`apps/api`), React dashboard (`apps/dashboard`), Postgres (Neon for
-dev/prod, PGlite for tests). See `.claude/plans` (or ask for a copy) for the full week-1 design.
+Stack: Fastify API (`apps/api`), Next.js dashboard (`apps/web`) and the original React dashboard
+(`apps/dashboard`), Postgres (Neon for dev/prod, PGlite for tests), deployed to AWS (Lambda and Amplify)
+with the CDK app in `infra/`. See `.claude/plans` (or ask for a copy) for the full week-1 design.
 
 ## Setup
 
@@ -56,10 +57,20 @@ browser. Pages: `/` (repository list; goes straight to the repo when there is on
 browser prompts once, and you can enter any username with the password. When it is unset the site
 is open in development, but a production build **refuses to serve (503)** rather than going public
 by accident. Basic auth sends the password with every request, so only expose the site over HTTPS
-(Vercel does this for you).
+(Amplify Hosting does this for you).
 
 `bun run build:web` makes a production build (CI runs it). The older Vite dashboard in
 `apps/dashboard` still exists and is untouched.
+
+## Deploying to AWS
+
+The API runs on AWS Lambda behind an API Gateway HTTP API, the dashboard on AWS Amplify Hosting, and
+the database stays on Neon; the infrastructure is the CDK app in `infra/`. Step-by-step instructions,
+secrets, rotation, rollback, teardown and troubleshooting are in [docs/deployment.md](docs/deployment.md).
+
+```
+bun run synth:infra     # bundle the Lambda and synthesize both stacks; deploys nothing
+```
 
 ## Registering a repo
 
@@ -91,15 +102,16 @@ Upload from a GitHub Actions step, after your tests have written `junit.xml`:
 - name: Upload test report to FlakeHunter
   if: always()
   run: |
-    curl --fail-with-body -X POST "$FLAKEHUNTER_URL/api/reports" \
+    gzip -c junit.xml | curl --fail-with-body -X POST "$FLAKEHUNTER_URL/api/reports" \
       -H "Authorization: Bearer $FLAKEHUNTER_TOKEN" \
       -H "Content-Type: application/xml" \
+      -H "Content-Encoding: gzip" \
       -H "X-FH-Run-Id: ${{ github.run_id }}" \
       -H "X-FH-Run-Attempt: ${{ github.run_attempt }}" \
       -H "X-FH-Sha: ${{ github.event.pull_request.head.sha || github.sha }}" \
       -H "X-FH-Branch: ${{ github.head_ref || github.ref_name }}" \
       -H "X-FH-Workflow: ${{ github.workflow }}" \
-      --data-binary @junit.xml
+      --data-binary @-
   env:
     FLAKEHUNTER_URL: https://your-flakehunter-host
     FLAKEHUNTER_TOKEN: ${{ secrets.FLAKEHUNTER_TOKEN }}
@@ -117,7 +129,13 @@ Use the PR head SHA (as above), not the merge commit, so uploads line up with we
 | `X-FH-Timestamp` | no (now) | When the tests ran, ISO-8601 (not more than 5 minutes in the future). Stamps a new run and its results; use it for late uploads or seeded history |
 
 Re-uploading the same run, attempt and report key is a no-op and returns `200` with the original
-counts; a first upload returns `201`. Bodies up to 11 MB are accepted.
+counts; a first upload returns `201`.
+
+**Body size.** The XML may be up to 11 MB, measured after decompression. Send it gzip-compressed with
+`Content-Encoding: gzip` (as above; reports shrink about tenfold). This matters when the API runs behind AWS
+Lambda, which rejects any request body over about 6 MB (about 4.5 MB of raw data after base64), so an uncompressed
+report above that size never reaches the API. `gzip` is the only encoding accepted; others get a `400`, and gzip
+data that expands past 11 MB gets a `413`.
 
 Read endpoints use the global `API_TOKEN` as the bearer token. `repo` is a numeric id or
 `owner/name`; `since` is an ISO-8601 timestamp (default: 30 days ago). List endpoints take
@@ -137,7 +155,7 @@ Every `/api` error has the same shape:
 ```
 
 Codes: `validation_error` (400), `unauthorized` (401), `not_found` (404), `payload_too_large` (413),
-`invalid_report` (422), `internal_error` (500). `details` appears only on validation errors.
+`invalid_report` (422), `rate_limited` (429, with `Retry-After`), `internal_error` (500). `details` appears only on validation errors.
 
 ## Demo data
 

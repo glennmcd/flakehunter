@@ -10,3 +10,5 @@ next-env.d.ts
 *.tsbuildinfo
 # Written by scripts/tunnel.ts
 scripts/webhook-url.txt
+cdk.out/
+infra/dist/

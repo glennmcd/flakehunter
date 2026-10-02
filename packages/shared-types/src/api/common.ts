@@ -7,6 +7,7 @@ export const errorCodeSchema = z.enum([
   "not_found",
   "payload_too_large",
   "invalid_report",
+  "rate_limited",
   "internal_error",
 ]);
 export type ApiErrorCode = z.infer<typeof errorCodeSchema>;

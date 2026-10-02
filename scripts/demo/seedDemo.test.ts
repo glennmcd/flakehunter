@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { gunzipSync } from "node:zlib";
 import { DEFAULT_DEMO_SEED, generateDemoRuns } from "./generateRuns.js";
 import {
   httpUploader,
@@ -78,7 +79,7 @@ describe("uploadHeaders", () => {
 });
 
 describe("httpUploader", () => {
-  it("POSTs the XML to /api/reports with the headers and returns status, body and Retry-After", async () => {
+  it("POSTs the gzipped XML to /api/reports with the headers and returns status, body and Retry-After", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     const fakeFetch = (async (url: string, init: RequestInit) => {
       calls.push({ url, init });
@@ -91,8 +92,8 @@ describe("httpUploader", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe("https://demo.example.com/api/reports");
     expect(calls[0]?.init.method).toBe("POST");
-    expect(calls[0]?.init.body).toBe("<testsuite/>");
-    expect(calls[0]?.init.headers).toEqual(uploadHeaders(sample, "fh_secret"));
+    expect(gunzipSync(calls[0]?.init.body as Uint8Array).toString()).toBe("<testsuite/>");
+    expect(calls[0]?.init.headers).toEqual({ ...uploadHeaders(sample, "fh_secret"), "content-encoding": "gzip" });
   });
 
   it("omits retryAfterSeconds when the header is absent or not a number", async () => {

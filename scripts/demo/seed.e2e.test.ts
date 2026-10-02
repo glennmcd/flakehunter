@@ -36,7 +36,7 @@ describe("seeding the demo through the real ingestion path", () => {
     try {
       const repo = await seedRepo(db, { githubRepoId: 4242, owner: "flakehunter-demo", name: "storefront" });
       const { token } = await mintRepoToken(db, repo.id);
-      const app = await buildApp({ db, logger: false });
+      const app = await buildApp({ db, logger: false, rateLimit: { max: 1_000_000 } });
       const read = { authorization: `Bearer ${API_TOKEN}` };
 
       const upload = async (req: UploadRequest): Promise<UploadResponse> => {
