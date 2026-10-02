@@ -1,5 +1,11 @@
 # FlakeHunter week 3: Next.js dashboard, demo data, deployment
 
+> **Status.** Tasks 1-10 (the API additions, demo data and the web app) were built as planned, with one change: the
+> web app uses Next 16, not 15. **The deployment half of this plan (tasks 11-13 and the Fly.io and Vercel
+> recommendation below) is superseded by [week3-pr3-aws.md](week3-pr3-aws.md)**: the API runs on AWS Lambda behind
+> API Gateway, the dashboard on AWS Amplify Hosting, with the infrastructure in `infra/` (AWS CDK) and the runbook in
+> [../deployment.md](../deployment.md). The original text is kept below for the record.
+
 ## Context
 Week 2 shipped the `/api` REST surface (merged as PR #1). Week 3 puts a real face on it and gets a public demo online:
 1. A Next.js dashboard in `apps/web` (overview + test detail) that reuses the API's Zod schemas for typed fetching.

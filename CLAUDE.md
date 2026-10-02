@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-FlakeHunter ingests JUnit XML reports from GitHub Actions, stores them in Postgres, and flags a test as flaky when it has both a pass and a fail (or error) on the same commit SHA, regardless of which workflow or job produced the results. It is a Bun workspaces monorepo: `apps/api` (Fastify), `apps/dashboard` (the original Vite + React page, on the week-1 routes), `apps/web` (the Next.js dashboard), `packages/shared-types`.
+FlakeHunter ingests JUnit XML reports from GitHub Actions, stores them in Postgres, and flags a test as flaky when it has both a pass and a fail (or error) on the same commit SHA, regardless of which workflow or job produced the results. It is a Bun workspaces monorepo: `apps/api` (Fastify), `apps/dashboard` (the original Vite + React page, on the week-1 routes), `apps/web` (the Next.js dashboard), `packages/shared-types`, plus `infra` (the AWS CDK app that deploys the API to Lambda and the dashboard to Amplify; see `docs/deployment.md`).
 
 ## Commands
 
@@ -20,11 +20,12 @@ bun run db:migrate       # apply migrations to DATABASE_URL (Neon)
 bun run db:generate      # generate a migration from schema.ts changes
 bun run lint             # Biome: lint, format check, import order (fails on any diff)
 bun run lint:fix         # apply Biome's safe fixes
-bun run typecheck        # tsc --noEmit for api, dashboard and web (web runs `next typegen` first)
-bun run test             # shared-types, api, web, then scripts tests
+bun run typecheck        # tsc --noEmit for api, dashboard, infra and web (web runs `next typegen` first)
+bun run test             # shared-types, api, web, infra, then scripts tests
+bun run synth:infra      # bundle the API Lambda and synthesize both CloudFormation stacks (CI runs it; deploys nothing)
 ```
 
-CI (`.github/workflows/ci.yml`) runs `lint`, `typecheck`, `test` and `build:web` on every PR and every push to `main`. Biome config is in `biome.json`: 2-space indent, double quotes, 120-character lines.
+CI (`.github/workflows/ci.yml`) runs `lint`, `typecheck`, `test`, `build:web` and `synth:infra` on every PR and every push to `main`. Biome config is in `biome.json`: 2-space indent, double quotes, 120-character lines.
 
 To run a subset of tests, use `bun test` with a path or name. The test DB helper resolves migrations relative to its own file, so the working directory does not matter (this also holds when debugging):
 
@@ -47,6 +48,12 @@ Minting a per-repo upload token for `POST /api/reports` (printed once; only its 
 TOKEN_REPO_FULL_NAME=<owner>/<repo> bun run --env-file=apps/api/.env scripts/create-repo-token.ts
 ```
 
+Revoking an upload token (takes effect on its next request; running it twice is harmless):
+
+```bash
+REVOKE_TOKEN=<token> bun run --env-file=apps/api/.env scripts/revoke-repo-token.ts
+```
+
 Seeding demo data through the real upload endpoint (see README, "Demo data"):
 
 ```bash
@@ -58,6 +65,7 @@ bun run seed:demo --dry-run                              # generate and count on
 
 - `apps/api/.env` holds `DATABASE_URL`, `API_TOKEN`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PAT` and `PORT`. Bun loads `.env` from the current working directory, so scripts run outside `apps/api` need `--env-file=apps/api/.env`.
 - Scripts in `scripts/` run from the repo root, where `drizzle-orm` and other API dependencies are not installed (they live under `apps/api/node_modules`). Import only from `apps/api/src/...` in those scripts, never from `drizzle-orm` directly, or they fail with "module not found". If you need a query, add or reuse a function in `apps/api/src` (e.g. `resolveRepo`).
+- On Lambda the four secrets (`DATABASE_URL`, `API_TOKEN`, `GITHUB_PAT`, `GITHUB_WEBHOOK_SECRET`) come from SSM Parameter Store under `SSM_PARAMETER_PREFIX`, not from `.env`; `RATE_LIMIT_TABLE` and `UPLOAD_RATE_LIMIT_MAX` / `UPLOAD_RATE_LIMIT_WINDOW_SECONDS` are set by the CDK stack.
 - `apps/dashboard/.env` holds `VITE_API_TOKEN`, which must equal `API_TOKEN`.
 - Dev and production use a hosted Neon database. Tests never touch it: they use in-memory PGlite and need no server or network.
 
@@ -88,6 +96,8 @@ The ingestion path runs from the webhook route through the `ingest/` modules:
 - It authenticates with a per-repo token, not `API_TOKEN`: a route-level `onRequest` hook calls `auth/repoToken.ts` (`findRepoByToken`, sha256 lookup, revocable). The repo comes from the token, never from the request. The hook runs before body parsing and header validation.
 - `ingest/ingestReport.ts` does the work in one transaction. Idempotency is the `reports` table, unique on `(run_id, report_key)`; the run is keyed on `(repo_id, github_run_id, attempt)`. A repeat returns 200 with the original counts (stored on the `reports` row); a first upload returns 201. A SHA that contradicts an existing run is a 400, and an existing run row (e.g. from the webhook) is reused, not overwritten.
 - Unparseable bodies or reports with no `<testsuite>` are `invalid_report` (422) and leave nothing behind.
+- **gzip:** `Content-Encoding: gzip` is accepted (`http/gzipBody.ts`, a `preParsing` hook that runs after the token check). The 11 MB limit applies to the **decompressed** size, enforced while streaming so a decompression bomb is destroyed at the limit (`413 payload_too_large`); bad gzip data is a `400`, and any other encoding is a `400`. This matters because a Lambda request body is capped near 6 MB (about 4.5 MB raw after base64), so large reports must be sent compressed; `scripts/seed-demo.ts` and the README snippet do.
+- **Rate limit:** an `onRequest` hook (`plugins/rateLimit.ts`, `ratelimit/`) runs before the token lookup and counts each request under its source IP and, if it sends one, a sha256 of its bearer token (the raw token is never stored). Past `UPLOAD_RATE_LIMIT_MAX` (default 120) per `UPLOAD_RATE_LIMIT_WINDOW_SECONDS` (default 60) it answers `429 rate_limited` with `Retry-After`. Counting by IP is what stops a flood of invented tokens. The store is a `RateLimitStore`: in memory for tests and local runs, a DynamoDB fixed-window counter (atomic `ADD`, TTL) on Lambda, where `buildApp` refuses to start without `RATE_LIMIT_TABLE`. A failing store lets requests through and logs a warning. `buildApp({ rateLimit })` overrides it in tests; tests that upload many reports from one address (the seed e2e) raise the limit.
 
 Read endpoints (global `API_TOKEN`), all under `/api`:
 
@@ -130,6 +140,8 @@ Test identity is `classname + name`, scoped per repo. Duplicate names within one
   - It exempts `/webhooks/github`, `/health` and `/api/reports` by exact match on the path part of `request.url`. `routeOptions.url` is not reliable there, and the hook also runs for unmatched routes. `/api/reports` does its own per-repo token check.
   - New public routes must be added to that exemption.
 - **Decorators:** `plugins/db.ts` and `plugins/github.ts` decorate `fastify.db` (Drizzle over postgres-js) and `fastify.github` (Octokit, authenticated with a PAT).
+- **Lambda entry:** `src/lambda.ts` exports `handler` (`createHandler` in `lambda/handler.ts`): it reads the secrets from SSM (`lambda/secrets.ts`, `loadSecrets`) into `process.env`, builds the app once per execution environment and wraps it with `@fastify/aws-lambda`. The adapter must wrap the app **before** `app.ready()`. A failed start is not cached. `index.ts` stays the long-running entry for local runs. Lambda runs Node 22, not Bun; the source uses no Bun-only APIs, so keep it that way.
+- **DB options:** `db/options.ts` (`dbOptionsFor`) gives postgres-js one connection plus timeouts on Lambda and turns off prepared statements for Neon's `-pooler` host. Migrations (`db/migrator.ts`, `bun run db:migrate`) resolve their folder from their own file and should use the direct (non-pooled) connection string.
 
 ### DB typing for tests
 
@@ -158,6 +170,16 @@ Next.js (App Router, currently 16.x with Turbopack) and React 19. Server Compone
 - **Password gate:** `src/proxy.ts` is Next 16's `proxy` (the renamed `middleware`; docs in `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md`). It runs on the Node.js runtime with no `matcher`, so it covers every request including `/_next/static`; do not add a matcher that exempts paths. The logic is pure and tested in `lib/basicAuth.ts` (`checkBasicAuth`: constant-time compare of the password only, username ignored; `gateDecision`). With `SITE_PASSWORD` set it is enforced in every environment; unset, it is open only when `NODE_ENV` is `development` or `test`, and otherwise returns 503 (fail closed). It reads `process.env` directly, not `loadEnv`, so a missing API variable cannot disable it.
 - **No generated agent files:** `next dev` would write `AGENTS.md` and `CLAUDE.md` into `apps/web`; `agentRules: false` in `next.config.ts` turns that off. Keep it off so this root file stays the single source.
 
+### AWS deployment (`infra/`)
+
+A CDK app (TypeScript) with two stacks in us-east-2: `FlakeHunterApi` (Lambda, API Gateway HTTP API on the `$default` stage, DynamoDB rate-limit table, least-privilege IAM, optional cost budget) and `FlakeHunterWeb` (Amplify Hosting app and branch). The runbook is `docs/deployment.md`; the agent never runs `cdk deploy` or `cdk bootstrap`, you do.
+
+- **Bundling:** `scripts/bundle-api.ts` (esbuild) builds `apps/api/src/lambda.ts` into `infra/dist/api`; `cdk.json`'s `build` runs it before every synth. CDK's own `NodejsFunction` bundler is not used (it shells out to the package manager and fails with Bun on Windows).
+- **Node, not Bun, for CDK:** CDK's template validation takes about 100 seconds to start in Bun and about 1 second in Node, so `cdk.json` runs the app with `node --import tsx`. Tests (`bun test` in `infra/`) synthesize every scenario in one Node subprocess (`test/synth-worker.ts`) and assert on the resulting templates; `test/bundle.test.ts` loads the real bundle under Node.
+- **Secrets never pass through CloudFormation:** the four API secrets are SSM SecureString parameters created by hand; the dashboard's `ApiToken` and `SitePassword` are NoEcho parameters; the GitHub token is a Secrets Manager dynamic reference.
+- **Keep in sync:** `SECRET_NAMES` in `infra/lib/api-stack.ts` and `apps/api/src/lambda/secrets.ts` (a test checks), and the Bun version in `BUILD_SPEC` and in the CI workflow (a test checks).
+- **AWS rules:** the block at the end of this file (from the AWS Agent Toolkit) applies; in short, all regional resources go in the project's one Region, us-east-2.
+
 ## Local webhook testing
 
 - GitHub must reach `/webhooks/github`. Use a quick tunnel:
@@ -171,8 +193,9 @@ Next.js (App Router, currently 16.x with Turbopack) and React 19. Server Compone
 ## Scope limits (intentional)
 
 - Only `workflow_run` `completed` events are handled, and one artifact per run is assumed.
-- Read auth is a single static token; upload tokens are per repo but have no management endpoint (mint with the script, revoke with `revokeRepoToken`). There is no OAuth.
-- No rate limiting or OpenAPI document for `/api` yet, and the dashboard still uses the week-1 routes.
+- Read auth is a single static token; upload tokens are per repo but have no management endpoint (mint with `scripts/create-repo-token.ts`, revoke with `scripts/revoke-repo-token.ts`). There is no OAuth.
+- Upload rate limiting exists (per IP and per token); reads are limited only by API Gateway throttling. There is no OpenAPI document for `/api`, and the old Vite `apps/dashboard` still uses the week-1 routes (the Next.js `apps/web` uses the v1 API).
+- Webhook processing still runs inside the request (artifact download and unzip). That suits small demo artifacts; a queue (SQS) is the follow-up for anything larger, since GitHub expects an answer within 10 seconds.
 - The design plan is in `docs/plans/` and `C:\Users\glenn\.claude\plans\i-m-building-flakehunter-it-virtual-sutton.md`.
 
 <!-- BEGIN AWS Agent Toolkit rules -->

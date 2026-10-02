@@ -1,5 +1,12 @@
 # FlakeHunter week 3, PR 3: host everything on AWS
 
+Outcome (written when tasks 1-10 below were finished; the plan text is kept as approved)
+All ten tasks are built and tested; nothing has been deployed (that is yours to do, see docs/deployment.md). Where the build differs from the plan:
+Task 6: requests are counted per source IP as well as per token (counting only by token let a flood of invented tokens each start a fresh budget), and no TRUST_PROXY setting is needed because API Gateway supplies the client IP.
+Task 7: the Lambda is bundled by our own esbuild script (infra/scripts/bundle-api.ts) instead of CDK's NodejsFunction, which fails with Bun on Windows. The CDK app and its tests run under Node (via tsx) because CDK's template validation takes about 100 seconds to start in Bun. Reserved concurrency is optional and unset by default, since a new account's quota of 10 leaves nothing to reserve.
+Task 8: GitHub access for Amplify is opt-in (a Secrets Manager secret holding a token); without it the Amplify app is created unconnected. The two dashboard secrets are NoEcho CloudFormation parameters.
+Task 9 added scripts/revoke-repo-token.ts and a FunctionName stack output, both used by the runbook.
+
 ## Context
 Tasks 1-10 of the week 3 plan are done (PR #2 merged; PR #3, the Next.js dashboard, is open). The remaining work was "deploy to Fly.io and Vercel" (`docs/plans/week3-demo-web.md`, tasks 11-13). The user would rather host everything on AWS, because it is more relevant to finding a job. This plan replaces tasks 11-13 and the Fly/Vercel recommendation. No code has been changed for it yet, and the previously drafted branch `feat/week3-deploy` was not created.
 
