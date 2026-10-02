@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Readable } from "node:stream";
-import { gzipSync } from "node:zlib";
+import { createGzip, gzipSync } from "node:zlib";
 import { ApiError } from "../api/errors.js";
 import { gunzipLimited } from "./gzipBody.js";
 
@@ -30,20 +30,21 @@ describe("gunzipLimited", () => {
     expect((error as ApiError).code).toBe("payload_too_large");
   });
 
-  it("stops reading its source once the limit is hit instead of decompressing it all", async () => {
-    // 64 MiB of zeros gzip to about 64 KB; with a 1 KiB limit the source must be destroyed long before it is drained.
-    const compressed = gzipSync(Buffer.alloc(64 * 1024 * 1024));
-    let pushed = 0;
-    const source = new Readable({
-      read() {
-        const chunk = compressed.subarray(pushed, pushed + 1024);
-        pushed += chunk.length;
-        this.push(chunk.length ? chunk : null);
-      },
-    });
-    await readAll(gunzipLimited(source, 1024)).catch(() => undefined);
-    expect(source.destroyed).toBe(true);
-    expect(pushed).toBeLessThan(compressed.length);
+  it("stops at the limit even when the compressed source never ends", async () => {
+    // An endless gzip stream of zeros: the only way this test can finish is for the limiter to stop reading, so there
+    // is no dependence on how deeply the streams buffer (a size comparison was flaky across platforms).
+    const zeros = Readable.from(
+      (function* () {
+        for (;;) yield Buffer.alloc(16 * 1024);
+      })(),
+    );
+    const endless = zeros.pipe(createGzip());
+
+    const error = await readAll(gunzipLimited(endless, 1024)).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe("payload_too_large");
+    expect(endless.destroyed).toBe(true);
   });
 
   it("fails with validation_error for bytes that are not gzip", async () => {
