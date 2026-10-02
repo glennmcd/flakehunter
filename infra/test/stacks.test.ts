@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { type ApiStackProps, SECRET_NAMES } from "../lib/api-stack.js";
+import { type ApiStackProps, DEFAULT_THROTTLE, SECRET_NAMES } from "../lib/api-stack.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const infraRoot = path.join(here, "..");
@@ -19,6 +19,8 @@ const SCENARIOS: Record<string, { stack: string; props: object }> = {
   custom: api({ parameterPrefix: "/fh/prod/", uploadRateLimit: { max: 5, windowSeconds: 10 } }),
   concurrency: api({ reservedConcurrency: 5 }),
   throttle: api({ throttle: { rateLimit: 5, burstLimit: 10 } }),
+  badThrottleZero: api({ throttle: { rateLimit: 0, burstLimit: 10 } }),
+  badThrottleFraction: api({ throttle: { rateLimit: 5, burstLimit: 7.5 } }),
   budget: api({ alertEmail: "me@example.com", monthlyBudgetUsd: 25 }),
   budgetDefault: api({ alertEmail: "me@example.com" }),
   badPrefixNoLeadingSlash: api({ parameterPrefix: "flakehunter/demo/" }),
@@ -155,7 +157,7 @@ describe("ApiStack HTTP API", () => {
     scenario("defaults").template.hasResourceProperties("AWS::ApiGatewayV2::Stage", {
       StageName: "$default",
       AutoDeploy: true,
-      DefaultRouteSettings: { ThrottlingRateLimit: 50, ThrottlingBurstLimit: 100 },
+      DefaultRouteSettings: { ThrottlingRateLimit: 10, ThrottlingBurstLimit: 20 },
       AccessLogSettings: Match.objectLike({
         DestinationArn: Match.anyValue(),
         Format: Match.stringLikeRegexp("requestId"),
@@ -167,6 +169,15 @@ describe("ApiStack HTTP API", () => {
     scenario("throttle").template.hasResourceProperties("AWS::ApiGatewayV2::Stage", {
       DefaultRouteSettings: { ThrottlingRateLimit: 5, ThrottlingBurstLimit: 10 },
     });
+  });
+
+  it("keeps the default throttle low, since it is the hard cap on what a flood can cost", () => {
+    expect(DEFAULT_THROTTLE).toEqual({ rateLimit: 10, burstLimit: 20 });
+  });
+
+  it("rejects a throttle that is not a positive whole number, naming the field", () => {
+    expect(scenario("badThrottleZero").error).toContain("throttle.rateLimit");
+    expect(scenario("badThrottleFraction").error).toContain("throttle.burstLimit");
   });
 
   it("has no CORS configuration, because the browser never calls it", () => {

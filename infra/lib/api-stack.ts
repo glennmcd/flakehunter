@@ -20,6 +20,9 @@ const DEFAULT_CODE_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.ur
  */
 export const SECRET_NAMES = ["DATABASE_URL", "API_TOKEN", "GITHUB_PAT", "GITHUB_WEBHOOK_SECRET"] as const;
 
+/** 10 requests per second, burst 20: a dashboard page view makes two calls, and the seed uploads one at a time. */
+export const DEFAULT_THROTTLE = { rateLimit: 10, burstLimit: 20 } as const;
+
 export interface ApiStackProps extends StackProps {
   /** Directory holding the bundled Lambda (index.mjs). Defaults to infra/dist/api; tests pass a small fixture. */
   codePath?: string;
@@ -29,7 +32,11 @@ export interface ApiStackProps extends StackProps {
   alertEmail?: string;
   /** Monthly cost, in USD, at which the budget alerts (80% actual, 100% forecast). Covers the whole account. */
   monthlyBudgetUsd?: number;
-  /** Steady and burst requests per second the HTTP API accepts, across all callers. */
+  /**
+   * Steady and burst requests per second the HTTP API accepts, across all callers; over it API Gateway answers 429
+   * itself, without invoking the Lambda. This is the hard cap on what a flood can cost, so keep it as low as real use
+   * allows (see "What it costs" in docs/deployment.md). Defaults to DEFAULT_THROTTLE.
+   */
   throttle?: { rateLimit: number; burstLimit: number };
   /** Per-token and per-IP upload limit enforced by the API itself (see apps/api/src/ratelimit). */
   uploadRateLimit?: { max: number; windowSeconds: number };
@@ -53,7 +60,10 @@ export class ApiStack extends Stack {
     if (!/^\/.+\/$/.test(prefix)) {
       throw new Error(`parameterPrefix must start and end with "/": got "${prefix}"`);
     }
-    const throttle = props.throttle ?? { rateLimit: 50, burstLimit: 100 };
+    const throttle = props.throttle ?? DEFAULT_THROTTLE;
+    for (const [name, value] of Object.entries(throttle)) {
+      if (!Number.isInteger(value) || value < 1) throw new Error(`throttle.${name} must be a positive integer`);
+    }
     const uploadRateLimit = props.uploadRateLimit ?? { max: 120, windowSeconds: 60 };
 
     Tags.of(this).add("project", "flakehunter");

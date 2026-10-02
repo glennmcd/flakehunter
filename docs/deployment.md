@@ -216,17 +216,92 @@ the Neon branch. The budget is removed with the stack.
 
 ## What it costs
 
-At demo traffic Lambda, API Gateway and DynamoDB (all pay per request) sit inside the AWS free tier for the first
-year. Amplify charges for build minutes and hosting/data transfer beyond its free allowance, CloudWatch Logs for
-stored logs (kept two weeks), and Secrets Manager a small monthly fee for the one GitHub token secret. Prices change:
-check the current pricing pages, and rely on the budget alert and the spend limit rather than on this paragraph.
+An estimate for the stack this runbook builds, at **list (pay-as-you-go) prices** read from the AWS Price List API for
+us-east-2 on 2026-10-02, with all arithmetic done by script. It is not a quote: it does not apply free-tier allowances or
+credits (the Free Tier API had no plan data for this project, so none are assumed), and the traffic is assumed, not
+measured. Neon is billed by Neon and is not included.
+
+**Monthly cost, in US dollars**
+
+| Scenario | Dashboard page views | Uploads | API requests | Estimated cost |
+| --- | --- | --- | --- | --- |
+| Idle (a portfolio link nobody visits) | 300 | 0 | 600 | about $0.54 |
+| Typical (a demo you show people) | 3,000 | 200 | 6,200 | about $1.67 |
+| Busy (a lot of interest) | 30,000 | 5,000 | 65,000 | about $6.03 |
+
+Where it goes in the typical month:
+
+| Item | Price used | Typical month |
+| --- | --- | --- |
+| Amplify builds | $0.01 per build minute; 20 builds of 5 minutes | $1.00 |
+| Amplify data transfer out | $0.15 per GB; about 0.4 MB per page view | $0.18 |
+| Secrets Manager (the GitHub token secret) | $0.40 per secret per month | $0.40 |
+| Amplify server rendering | $0.30 per million requests plus $0.20 per GB-hour | $0.05 |
+| Amplify artifact storage | $0.023 per GB-month; about 0.5 GB | $0.01 |
+| Lambda | $0.20 per million requests plus $0.0000133334 per GB-second (arm64, 1 GB) | $0.02 |
+| API Gateway HTTP API | $1.00 per million requests | $0.01 |
+| CloudWatch Logs | $0.50 per GB ingested, $0.03 per GB-month stored (14 days) | $0.01 |
+| DynamoDB rate-limit counters | $0.625 per million writes (two per upload) | under $0.01 |
+| Systems Manager parameters, Budgets, CloudFormation, CDK bootstrap bucket | standard parameters and the budget have no charge; the bucket is about 0.05 GB | about $0.00 |
+
+The pay-per-request services (Lambda, API Gateway, DynamoDB) are almost free at this size. The bill is mostly Amplify
+builds and the one Secrets Manager secret. If you attach the repository in the Amplify console instead of using a
+token (step 4), the secret and its $0.40 go away.
+
+**One-time cost of following the runbook:** about $0.50, nearly all of it the first ten Amplify builds. Seeding twice is
+260 uploads, which costs under a cent.
+
+**Assumptions** (change them and the numbers move): each page view makes 2 API calls; a request bills 0.12 s warm,
+1.5 s cold, with 5% cold, an average of 0.19 s at 1 GB; about 1.5 KB of function logs and 0.5 KB of access logs per
+request; Amplify server rendering of 0.15 s per request at 1 GB with two requests per page view; a 5-minute build on
+Amplify's standard build instance. The first Amplify builds may take longer while Bun installs.
+
+**The worst case is set by the throttle, not by your traffic.** The HTTP API accepts up to **10 requests per second**
+(burst 20) by default; over that, API Gateway answers 429 itself without running the Lambda. If someone sent 10 per
+second continuously for a month (about 26 million requests), API Gateway, Lambda and logs would cost roughly $70 to
+$120. The same flood at an earlier default of 50 per second would have cost roughly $370 to $610, so raise the limit
+only if real traffic needs it: `-c throttleRate=N` (steady) and `-c throttleBurst=M` (burst, default twice N) at
+deploy time. A dashboard page view makes two API calls, so 10 per second is about five visitors loading a page in the
+same second; the seed uploads one report at a time and backs off on a 429. The budget alert emails you but does not
+stop spending, and reserved concurrency (step 0) limits how many run at once, not how many are billed. Only a spend
+limit in AWS Settings (billing) is a hard dollar cap; see "Stopping a flood" below.
+
+To redo this with current prices, ask for the AWS Price List entries for Lambda (`AWSLambda`), API Gateway
+(`AmazonApiGateway`), DynamoDB (`AmazonDynamoDB`), CloudWatch (`AmazonCloudWatch`), Amplify (`AWSAmplify`) and Secrets
+Manager (`AWSSecretsManager`) in us-east-2, or use the AWS Pricing Calculator. Prices and free-tier rules change, so
+treat the budget alert and your project's spend limit as the real protection.
+
+## Stopping a flood
+
+Layers, from fastest and cheapest to blunt:
+
+1. **The API throttle** (above): a hard per-second cap that needs no action from you.
+2. **Reserved concurrency** (step 0, if your quota allows): caps how many Lambda executions run at once.
+3. **A spend limit** in AWS Settings, Billing (project owners only; check your plan): AWS pauses the project when it is
+   exceeded. It is the only true dollar cap, and it stops everything, including the dashboard. Set it just above what
+   you would tolerate, with the budget email set below it so you hear first.
+4. **Not available here:** AWS WAF rate rules cannot be attached to an HTTP API (AWS supports only REST APIs), and
+   budget actions can only apply IAM or SCP policies, stop EC2 or RDS instances, or start an SSM automation, and
+   budget data refreshes only a few times a day, so a budget cannot react to a flood in time.
+
+An automatic kill switch (a CloudWatch alarm on the request count that sets the function's reserved concurrency to 0)
+is possible but not built. If you are being flooded now: set the function's concurrency to 0 to stop all invocations,
+then restore it when it is over:
+
+```bash
+aws lambda put-function-concurrency --profile flakehunter --region us-east-2   --function-name <FunctionName output> --reserved-concurrent-executions 0
+aws lambda delete-function-concurrency --profile flakehunter --region us-east-2 --function-name <FunctionName output>
+```
+
+(The delete command restores normal unreserved behaviour. Setting the concurrency to 0 can fail on accounts whose
+quota leaves no room to reserve; then lower the throttle with `-c throttleRate=1` and redeploy.)
 
 ## Protection against abuse
 
 Upload (`POST /api/reports`) is the only public write path. Layers: a per-repository token (only its hash is stored;
 revocable); a limit of 120 requests per minute per token and per IP, counted in DynamoDB and checked before any
 database lookup; gzip bodies are measured after decompression (11 MB cap, so a small file cannot expand into a huge
-one); HTTP API throttling of 50 requests per second; the dashboard behind a password; the demo data in its own Neon
+one); HTTP API throttling of 10 requests per second (burst 20); the dashboard behind a password; the demo data in its own Neon
 branch. Reads need the separate `API_TOKEN`, which lives only in Parameter Store and in the Amplify app's server
 settings, never in a browser.
 
@@ -242,6 +317,7 @@ settings, never in a browser.
 | CloudFormation parameter | `FlakeHunterWeb:SitePassword` | the dashboard gate, 8 or more characters |
 | CDK context (`~/.cdk.json` or `-c`) | `alertEmail`, `monthlyBudgetUsd` | budget alert address and amount (default 10) |
 | CDK context | `reservedConcurrency` | optional Lambda concurrency cap |
+| CDK context | `throttleRate`, `throttleBurst` | API requests per second and burst (defaults 10 and 20); the hard cap on flood cost |
 | CDK context | `repository`, `githubTokenSecretName`, `branch` | the GitHub source for Amplify |
 | Your shell | `DEMO_UPLOAD_TOKEN` | upload token for the demo repository, used by the seed script only |
 | Lambda (set by CDK) | `UPLOAD_RATE_LIMIT_MAX`, `UPLOAD_RATE_LIMIT_WINDOW_SECONDS`, `RATE_LIMIT_TABLE` | not secret |

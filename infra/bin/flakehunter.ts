@@ -18,13 +18,24 @@ const number = (name: string): number | undefined => {
 
 const env = { account: process.env.CDK_DEFAULT_ACCOUNT, region: REGION };
 
+// -c throttleRate=N sets the API's steady requests per second (default 10); -c throttleBurst=M the burst (default 2N).
+const throttleRate = number("throttleRate");
+const throttleBurst = number("throttleBurst");
+if (throttleBurst !== undefined && throttleRate === undefined) {
+  throw new Error("context throttleBurst needs throttleRate as well");
+}
+const throttle =
+  throttleRate === undefined ? undefined : { rateLimit: throttleRate, burstLimit: throttleBurst ?? throttleRate * 2 };
+
 const api = new ApiStack(app, "FlakeHunterApi", {
   env,
   description: "FlakeHunter API: Lambda behind an API Gateway HTTP API",
   // Pass with: cdk deploy -c alertEmail=you@example.com [-c monthlyBudgetUsd=10] [-c reservedConcurrency=5]
+  //   [-c throttleRate=10 -c throttleBurst=20]
   alertEmail: app.node.tryGetContext("alertEmail"),
   monthlyBudgetUsd: number("monthlyBudgetUsd"),
   reservedConcurrency: number("reservedConcurrency"),
+  throttle,
 });
 
 // The dashboard on Amplify Hosting. Deploy with the two secrets it needs and, to build from GitHub, the repository:
