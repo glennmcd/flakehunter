@@ -30,3 +30,6 @@ jobs:
       - run: bun run build:web
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+      # Bundles the API Lambda and synthesizes the CloudFormation template; nothing is deployed and no AWS
+      # credentials are used. Needs Node, which the runner has.
+      - run: bun run synth:infra
