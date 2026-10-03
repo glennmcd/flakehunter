@@ -65,3 +65,37 @@ describe("getFlakyTests", () => {
     expect(error.message).not.toContain("tok");
   });
 });
+
+describe("getTestFailures", () => {
+  const failure = {
+    resultId: 9,
+    status: "failed" as const,
+    headSha: "a".repeat(40),
+    headBranch: "main",
+    failureMessage: "boom",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    run: { id: 1, githubRunId: 2, attempt: 1, workflowName: "CI", htmlUrl: null },
+  };
+  const test = { id: 7, repoId: 1, classname: "pkg.Foo", name: "a test" };
+
+  it("requests the failures path for the test id with the bearer token", async () => {
+    const { calls, client } = clientWith(() => Response.json({ test, data: [failure] }));
+
+    const result = await client.getTestFailures(7);
+
+    expect(result.data).toEqual([failure]);
+    expect(calls[0]?.url).toBe("http://api.test/api/tests/7/failures");
+    expect((calls[0]?.init.headers as Record<string, string>)?.authorization).toBe("Bearer tok");
+  });
+
+  it("surfaces a 404 from the API", async () => {
+    const body = { error: { code: "not_found", message: "Test 7 not found" }, requestId: "r1" };
+    const { client } = clientWith(() => Response.json(body, { status: 404 }));
+    expect(await client.getTestFailures(7).catch((e) => e)).toMatchObject({ code: "not_found", status: 404 });
+  });
+
+  it("reports a body that does not match the schema as invalid_response", async () => {
+    const { client } = clientWith(() => Response.json({ test, data: [{ ...failure, status: "passed" }] }));
+    expect(await client.getTestFailures(7).catch((e) => e)).toMatchObject({ code: "invalid_response" });
+  });
+});

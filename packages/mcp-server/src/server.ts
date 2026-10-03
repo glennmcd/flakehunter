@@ -12,6 +12,27 @@ export const listFlakyTestsInput = {
   limit: z.number().int().min(1).max(200).default(20).describe("Maximum number of tests to return"),
 };
 
+export const getTestFailuresInput = {
+  testId: z.number().int().positive().describe("Numeric test id, as returned by list_flaky_tests"),
+};
+
+type ToolResult = {
+  content: { type: "text"; text: string }[];
+  structuredContent?: Record<string, unknown>;
+  isError?: true;
+};
+
+function ok(result: Record<string, unknown>): ToolResult {
+  return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
+}
+
+/** Only the API's own code and message reach the model; anything else gets fixed text. */
+function fail(error: unknown): ToolResult {
+  const text =
+    error instanceof ApiClientError ? `FlakeHunter API error (${error.code}): ${error.message}` : "Unexpected error";
+  return { isError: true, content: [{ type: "text", text }] };
+}
+
 export function createServer(deps: { client: ApiClient }): McpServer {
   const server = new McpServer({ name: "flakehunter", version: "0.0.1" });
 
@@ -26,15 +47,27 @@ export function createServer(deps: { client: ApiClient }): McpServer {
     async ({ repo, since, minRuns, limit }) => {
       try {
         const { data, page } = await deps.client.getFlakyTests({ repo, since, minRuns, limit });
-        const result = { repo, tests: data, total: page.total };
-        return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result };
+        return ok({ repo, tests: data, total: page.total });
       } catch (error) {
-        // Only the API's own code and message reach the model; anything else gets fixed text.
-        const text =
-          error instanceof ApiClientError
-            ? `FlakeHunter API error (${error.code}): ${error.message}`
-            : "Unexpected error";
-        return { isError: true, content: [{ type: "text", text }] };
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_test_failures",
+    {
+      title: "Get test failures",
+      description:
+        "Get the 50 most recent failed or errored results for one test, newest first, with the failure message, commit and workflow run of each.",
+      inputSchema: getTestFailuresInput,
+    },
+    async ({ testId }) => {
+      try {
+        const { test, data } = await deps.client.getTestFailures(testId);
+        return ok({ test, failures: data });
+      } catch (error) {
+        return fail(error);
       }
     },
   );

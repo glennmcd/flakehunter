@@ -14,8 +14,11 @@ const item = {
   lastFlakyAt: "2026-01-01T00:00:00.000Z",
 };
 
-async function connect(getFlakyTests: ApiClient["getFlakyTests"]) {
-  const server = createServer({ client: { getFlakyTests } });
+async function connect(
+  getFlakyTests: ApiClient["getFlakyTests"],
+  getTestFailures: ApiClient["getTestFailures"] = unusedFailures,
+) {
+  const server = createServer({ client: { getFlakyTests, getTestFailures } });
   const client = new Client({ name: "test", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -25,13 +28,16 @@ async function connect(getFlakyTests: ApiClient["getFlakyTests"]) {
 const unused: ApiClient["getFlakyTests"] = async () => {
   throw new Error("should not be called");
 };
+const unusedFailures: ApiClient["getTestFailures"] = async () => {
+  throw new Error("should not be called");
+};
 
 describe("flakehunter MCP server", () => {
-  it("advertises the list_flaky_tests tool", async () => {
+  it("advertises its tools", async () => {
     const { client, close } = await connect(unused);
     try {
       const { tools } = await client.listTools();
-      expect(tools.map((t) => t.name)).toEqual(["list_flaky_tests"]);
+      expect(tools.map((t) => t.name)).toEqual(["list_flaky_tests", "get_test_failures"]);
     } finally {
       await close();
     }
@@ -88,5 +94,61 @@ describe("flakehunter MCP server", () => {
     } finally {
       await close();
     }
+  });
+
+  describe("get_test_failures", () => {
+    const test = { id: 7, repoId: 1, classname: "pkg.Foo", name: "a test" };
+    const failure = {
+      resultId: 9,
+      status: "failed" as const,
+      headSha: "a".repeat(40),
+      headBranch: "main",
+      failureMessage: "boom",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      run: { id: 1, githubRunId: 2, attempt: 1, workflowName: "CI", htmlUrl: null },
+    };
+
+    it("returns the test and its failures", async () => {
+      let received: number | undefined;
+      const { client, close } = await connect(unused, async (testId) => {
+        received = testId;
+        return { test, data: [failure] };
+      });
+      try {
+        const res = await client.callTool({ name: "get_test_failures", arguments: { testId: 7 } });
+        expect(res.isError).toBeFalsy();
+        expect(res.structuredContent).toEqual({ test, failures: [failure] });
+        expect(received).toBe(7);
+      } finally {
+        await close();
+      }
+    });
+
+    it("turns an API error into a tool error carrying the API code", async () => {
+      const { client, close } = await connect(unused, async () => {
+        throw new ApiClientError("not_found", "Test 7 not found", 404);
+      });
+      try {
+        const res = await client.callTool({ name: "get_test_failures", arguments: { testId: 7 } });
+        expect(res.isError).toBe(true);
+        expect(JSON.stringify(res.content)).toContain("not_found");
+      } finally {
+        await close();
+      }
+    });
+
+    it("rejects a missing or non-positive testId", async () => {
+      const { client, close } = await connect(unused);
+      try {
+        for (const args of [{}, { testId: 0 }, { testId: "abc" }]) {
+          const res = await client
+            .callTool({ name: "get_test_failures", arguments: args })
+            .catch(() => ({ isError: true }));
+          expect(res.isError).toBe(true);
+        }
+      } finally {
+        await close();
+      }
+    });
   });
 });
