@@ -5,8 +5,7 @@ import { ApiError } from "../../api/errors.js";
 import { findRepoByToken } from "../../auth/repoToken.js";
 import { gzipPreParsing } from "../../http/gzipBody.js";
 import { ingestReport } from "../../ingest/ingestReport.js";
-
-const MAX_REPORT_BYTES = 11 * 1024 * 1024;
+import { MAX_REPORT_BYTES } from "../../ingest/limits.js";
 
 declare module "fastify" {
   interface FastifyRequest {

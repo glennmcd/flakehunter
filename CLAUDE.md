@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-FlakeHunter ingests JUnit XML reports from GitHub Actions, stores them in Postgres, and flags a test as flaky when it has both a pass and a fail (or error) on the same commit SHA, regardless of which workflow or job produced the results. It is a Bun workspaces monorepo: `apps/api` (Fastify), `apps/dashboard` (the original Vite + React page, on the week-1 routes), `apps/web` (the Next.js dashboard), `packages/shared-types`, plus `infra` (the AWS CDK app that deploys the API to Lambda and the dashboard to Amplify; see `docs/deployment.md`).
+FlakeHunter ingests JUnit XML reports from GitHub Actions, stores them in Postgres, and flags a test as flaky when it has both a pass and a fail (or error) on the same commit SHA, regardless of which workflow or job produced the results. It is a Bun workspaces monorepo: `apps/api` (Fastify), `apps/web` (the Next.js dashboard), `packages/shared-types`, plus `infra` (the AWS CDK app that deploys the API to Lambda and the dashboard to Amplify; see `docs/deployment.md`).
 
 ## Commands
 
@@ -13,14 +13,13 @@ From the repo root:
 ```bash
 bun install
 bun run dev:api          # Fastify on :3000 (watch mode)
-bun run dev:dashboard    # Vite on :5173, proxies /api -> :3000
 bun run dev:web          # Next.js on :3001 (apps/web); needs apps/web/.env.local, see .env.example
 bun run build:web        # Next.js production build (CI runs it)
 bun run db:migrate       # apply migrations to DATABASE_URL (Neon)
 bun run db:generate      # generate a migration from schema.ts changes
 bun run lint             # Biome: lint, format check, import order (fails on any diff)
 bun run lint:fix         # apply Biome's safe fixes
-bun run typecheck        # tsc --noEmit for api, dashboard, infra and web (web runs `next typegen` first)
+bun run typecheck        # tsc --noEmit for api, infra and web (web runs `next typegen` first)
 bun run test             # shared-types, api, web, infra, then scripts tests
 bun run synth:infra      # bundle the API Lambda and synthesize both CloudFormation stacks (CI runs it; deploys nothing)
 ```
@@ -66,7 +65,6 @@ bun run seed:demo --dry-run                              # generate and count on
 - `apps/api/.env` holds `DATABASE_URL`, `API_TOKEN`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_PAT` and `PORT`. Bun loads `.env` from the current working directory, so scripts run outside `apps/api` need `--env-file=apps/api/.env`.
 - Scripts in `scripts/` run from the repo root, where `drizzle-orm` and other API dependencies are not installed (they live under `apps/api/node_modules`). Import only from `apps/api/src/...` in those scripts, never from `drizzle-orm` directly, or they fail with "module not found". If you need a query, add or reuse a function in `apps/api/src` (e.g. `resolveRepo`).
 - On Lambda the four secrets (`DATABASE_URL`, `API_TOKEN`, `GITHUB_PAT`, `GITHUB_WEBHOOK_SECRET`) come from SSM Parameter Store under `SSM_PARAMETER_PREFIX`, not from `.env`; `RATE_LIMIT_TABLE` and `UPLOAD_RATE_LIMIT_MAX` / `UPLOAD_RATE_LIMIT_WINDOW_SECONDS` are set by the CDK stack.
-- `apps/dashboard/.env` holds `VITE_API_TOKEN`, which must equal `API_TOKEN`.
 - Dev and production use a hosted Neon database. Tests never touch it: they use in-memory PGlite and need no server or network.
 
 ## Architecture
@@ -77,13 +75,14 @@ The ingestion path runs from the webhook route through the `ingest/` modules:
 
 1. `routes/webhooks/github.ts` registers a JSON content-type parser scoped to that plugin that keeps `request.rawBody`, then verifies `X-Hub-Signature-256` against it.
 2. It inserts the delivery into `webhook_events`, keyed on `X-GitHub-Delivery`. If the insert returns no row, the delivery is a duplicate and processing is skipped.
-3. For `workflow_run` events with `action: completed`, it looks up the repo by `github_repo_id` and calls `ingest/processWorkflowRun.ts` **synchronously inside the request**.
-4. Failures are written to `webhook_events.processing_error` and the route still returns 200.
+3. For `workflow_run` events with `action: completed`, it first skips runs that may carry outside code (`github/runSource.ts`), because whoever writes a run's code controls its artifact: a trigger not in `TRUSTED_TRIGGERS` (`push`, `pull_request`, `merge_group`, `schedule`, `workflow_dispatch`; this excludes `pull_request_target`, `workflow_run` and `issue_comment`, which run in the base repo but often relay fork code), or a `workflow_run.head_repository` that is missing or not the repo itself (fork pull requests). Otherwise it looks up the repo by `github_repo_id` and calls `ingest/processWorkflowRun.ts` **synchronously inside the request**, passing the owner and name from the `repos` row, never from the payload.
+4. Skips and failures are written to `webhook_events.processing_error` and the route still returns 200. Only fixed text is stored there (skip reasons, `ArtifactRejectedError` messages, or "processing failed; see the API logs"); raw error text goes to the log only.
 
 `processWorkflowRun` then:
 
 - upserts `workflow_runs` on `(repo_id, github_run_id, github_run_attempt)`
-- takes the **first** artifact only, downloads the zip and extracts `.xml` entries (`zipExtract.ts`)
+- takes the **first** artifact that has not expired, refuses it (`ArtifactRejectedError`, `ingest/limits.ts`) when its listed or downloaded size is over `MAX_ARTIFACT_ZIP_BYTES` (10 MB), downloads the zip and extracts `.xml` entries (`zipExtract.ts`)
+- `zipExtract.ts` treats the artifact as untrusted: it streams the zip through fflate's `Unzip`, never inflates non-XML entries, caps the entry count (`MAX_ZIP_ENTRIES`), and stops as soon as the **actual** decompressed XML passes `MAX_REPORT_BYTES` (the archive's declared sizes are not trusted), so a zip bomb is never fully inflated
 - parses each file with `junitParser.ts`, which flattens nested `<testsuites>`/`<testsuite>` at any depth
 - inserts `test_suites`, upserts `test_cases` on `(repo_id, classname, name)`, and inserts `test_results` (shared with uploads via `ingest/insertParsedSuites.ts`)
 
@@ -147,13 +146,9 @@ Test identity is `classname + name`, scoped per repo. Duplicate names within one
 
 - Domain functions take `AnyDb` from `db/client.ts` (a generic `PgDatabase`), not the postgres-js-specific `Db`. That lets the same code run against the PGlite instance from `apps/api/test/testDb.ts`. Keep new DB-touching functions on `AnyDb`.
 - `createTestDb()` returns a fresh in-memory database with all migrations applied.
-- Tests fake the GitHub client with a plain object cast to `GithubClient`; see `processWorkflowRun.test.ts`.
+- Tests fake the GitHub client with a plain object cast to `GithubClient`; see `processWorkflowRun.test.ts`. App-level tests pass it as `buildApp({ github })`; see `routes/webhooks/github.test.ts`, which also signs payloads.
 - With PGlite, `db.execute(sql...)` returns `{ rows }`, not an array. Because the shapes differ per driver, production query code uses the Drizzle query builder (including `$with` CTEs); raw `execute` is only for assertions in tests.
 - `test/fixtures.ts` has `seedRepo`, `seedRun` and `seedResult` (creates the test case, run and suite for you), plus `daysAgo` and `sha`. `test/apiApp.ts` builds a small app for route tests. Assert HTTP bodies with `res.json<unknown>()` when passing them straight to `toEqual`, or the types collapse to `undefined`.
-
-### Dashboards
-
-`apps/dashboard` is week-1 bare-bones: a single `FlakyTestsList.tsx` page with `REPO_ID` hardcoded, on the week-1 routes through a Vite proxy that strips `/api`. It defines its own `FlakyTest` type rather than importing `@flakehunter/shared-types`. It is being superseded by `apps/web` and is otherwise left alone.
 
 ### Web app (`apps/web`)
 
@@ -194,7 +189,7 @@ A CDK app (TypeScript) with two stacks in us-east-2: `FlakeHunterApi` (Lambda, A
 
 - Only `workflow_run` `completed` events are handled, and one artifact per run is assumed.
 - Read auth is a single static token; upload tokens are per repo but have no management endpoint (mint with `scripts/create-repo-token.ts`, revoke with `scripts/revoke-repo-token.ts`). There is no OAuth.
-- Upload rate limiting exists (per IP and per token); reads are limited only by API Gateway throttling. There is no OpenAPI document for `/api`, and the old Vite `apps/dashboard` still uses the week-1 routes (the Next.js `apps/web` uses the v1 API).
+- Upload rate limiting exists (per IP and per token); reads are limited only by API Gateway throttling. There is no OpenAPI document for `/api`. The week-1 routes (`/repos`, `/flaky`, `/runs`, `/tests`) no longer have a caller since the old Vite dashboard was removed (`apps/web` uses the v1 API); removing them is a follow-up.
 - Webhook processing still runs inside the request (artifact download and unzip). That suits small demo artifacts; a queue (SQS) is the follow-up for anything larger, since GitHub expects an answer within 10 seconds.
 - The design plan is in `docs/plans/` and `C:\Users\glenn\.claude\plans\i-m-building-flakehunter-it-virtual-sutton.md`.
 

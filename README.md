@@ -4,8 +4,7 @@ Ingests JUnit XML test reports from GitHub Actions, stores results in Postgres, 
 test as flaky when it has both a pass and a fail result on the same commit SHA — regardless of
 which workflow or job produced the result.
 
-Stack: Fastify API (`apps/api`), Next.js dashboard (`apps/web`) and the original React dashboard
-(`apps/dashboard`), Postgres (Neon for dev/prod, PGlite for tests), deployed to AWS (Lambda and Amplify)
+Stack: Fastify API (`apps/api`), Next.js dashboard (`apps/web`), Postgres (Neon for dev/prod, PGlite for tests), deployed to AWS (Lambda and Amplify)
 with the CDK app in `infra/`. See `.claude/plans` (or ask for a copy) for the full week-1 design.
 
 ## Setup
@@ -29,11 +28,7 @@ with the CDK app in `infra/`. See `.claude/plans` (or ask for a copy) for the fu
    ```
    bun run dev:api
    ```
-5. Start the dashboard (separate terminal): copy `apps/dashboard/.env.example` to
-   `apps/dashboard/.env` (`VITE_API_TOKEN` must match `API_TOKEN` above), then:
-   ```
-   bun run dev:dashboard
-   ```
+5. Start the dashboard: see the next section.
 
 ## Web dashboard (`apps/web`)
 
@@ -59,8 +54,7 @@ is open in development, but a production build **refuses to serve (503)** rather
 by accident. Basic auth sends the password with every request, so only expose the site over HTTPS
 (Amplify Hosting does this for you).
 
-`bun run build:web` makes a production build (CI runs it). The older Vite dashboard in
-`apps/dashboard` still exists and is untouched.
+`bun run build:web` makes a production build (CI runs it).
 
 ## Deploying to AWS
 
@@ -211,7 +205,12 @@ On the target repo: **Settings → Webhooks → Add webhook**
 
 Once registered, any `workflow_run` `completed` event triggers FlakeHunter to fetch the run's
 JUnit XML artifact (assumes a single artifact per run, zipped, containing `.xml` files), parse
-it, and store results. Query `GET /repos/:id/flaky-tests` (bearer token required) to see what's
+it, and store results. Only runs of the repo's own code are ingested: runs from forks are skipped,
+and so are runs started by triggers other than `push`, `pull_request`, `merge_group`, `schedule`
+and `workflow_dispatch` (for example `pull_request_target`, which is often used to run fork code),
+because whoever writes a run's code controls its artifact. An artifact over 10 MB zipped, or whose XML files
+decompress to more than 11 MB together, is refused; the reason is recorded in
+`webhook_events.processing_error`. Query `GET /repos/:id/flaky-tests` (bearer token required) to see what's
 currently flagged as flaky.
 
 ## Known week-1 scope limits
