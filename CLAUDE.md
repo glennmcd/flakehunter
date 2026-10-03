@@ -102,6 +102,7 @@ Read endpoints (global `API_TOKEN`), all under `/api`:
 
 - `GET /api/tests/flaky?repo=&since=&minRuns=` (`flaky/flakeRateQueries.ts`): flake rate = flaky SHAs / SHAs run in the window, skipped results ignored, only tests with at least `minRuns` (default 5) SHAs and one flaky SHA.
 - `GET /api/tests/:id/history` (`history/testHistoryQueries.ts`): newest-first results; never returns `failureStack`.
+- `GET /api/tests/:id/failures` (`history/testFailuresQueries.ts`): the 50 most recent failed/error results for a test, newest first, with run details and no pagination; never returns `failureStack`.
 - `GET /api/repos/:id/summary` (`summary/repoSummaryQueries.ts`): windowed totals; `lastRunAt` ignores the window.
 - `GET /api/repos` (`repos/repoQueries.ts`): paginated repo list ordered by full name; the web app needs it to find a repo's numeric id.
 

@@ -55,6 +55,22 @@ export const testHistoryItemSchema = z.object({
   }),
 });
 
+export const testFailureItemSchema = z.object({
+  resultId: z.number().int(),
+  status: z.enum(["failed", "error"]),
+  headSha: z.string(),
+  headBranch: z.string().nullable(),
+  failureMessage: z.string().nullable(),
+  createdAt: z.string(),
+  run: testHistoryItemSchema.shape.run,
+});
+
+export const testFailuresResponseSchema = z.object({
+  test: z.object({ id: z.number().int(), repoId: z.number().int(), classname: z.string(), name: z.string() }),
+  data: z.array(testFailureItemSchema),
+});
+export type TestFailuresResponse = z.infer<typeof testFailuresResponseSchema>;
+
 export const testHistoryResponseSchema = z.object({
   test: z.object({ id: z.number().int(), repoId: z.number().int(), classname: z.string(), name: z.string() }),
   data: z.array(testHistoryItemSchema),
