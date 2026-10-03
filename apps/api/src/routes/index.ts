@@ -3,6 +3,7 @@ import flakyTestsRoute from "./api/flakyTests.js";
 import reportsRoute from "./api/reports.js";
 import repoSummaryRoute from "./api/repoSummary.js";
 import apiReposRoute from "./api/repos.js";
+import testFailuresRoute from "./api/testFailures.js";
 import testHistoryRoute from "./api/testHistory.js";
 import flakyRoute from "./flaky.js";
 import healthRoute from "./health.js";
@@ -36,6 +37,7 @@ export const routeModules: RouteModule[] = [
   { file: "api/repoSummary", plugin: repoSummaryRoute, prefix: "/api" },
   { file: "api/reports", plugin: reportsRoute, prefix: "/api" },
   { file: "api/repos", plugin: apiReposRoute, prefix: "/api" },
+  { file: "api/testFailures", plugin: testFailuresRoute, prefix: "/api" },
   { file: "api/testHistory", plugin: testHistoryRoute, prefix: "/api" },
   { file: "webhooks/github", plugin: githubWebhookRoute, prefix: "/webhooks" },
 ];
