@@ -11,6 +11,7 @@
     "@types/bun": "^1.1.14"
   },
   "dependencies": {
+    "@flakehunter/shared-types": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.32.0",
     "zod": "^4.6.5"
   }
