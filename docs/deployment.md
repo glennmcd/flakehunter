@@ -185,7 +185,7 @@ aws amplify start-job --profile flakehunter --region us-east-2 --job-type RELEAS
 ```
 
 Watch the build in the Amplify console. **First-deploy risks**, none of which can be tested without deploying: whether
-the build image handles Bun 1.4.2 and `bun install --filter`, and whether Next 16's Node-runtime password gate
+the build image handles Bun 1.4.2 (it does), and whether Next 16's Node-runtime password gate
 (`apps/web/src/proxy.ts`) runs on Amplify. If the build fails, the log names the command; the build spec is
 `BUILD_SPEC` in `infra/lib/web-stack.ts`.
 
@@ -345,6 +345,8 @@ settings, never in a browser.
 | Upload returns 429 | The per-token or per-IP limit; wait the `Retry-After` seconds. The seeder does this itself. |
 | Upload returns 413 | Over 11 MB after decompression, or an uncompressed body over about 4.5 MB (Lambda's request limit): send it gzip-compressed. |
 | `cdk deploy` fails "Specified ReservedConcurrentExecutions ... decreases ... UnreservedConcurrentExecution" | Remove `reservedConcurrency`; the account's quota is too small to reserve any (step 0). |
-| Amplify build fails at `bun install` | Check the log for the Bun or filter error; see `BUILD_SPEC` in `infra/lib/web-stack.ts`. |
+| Amplify build fails at `bun install` | Check the log for the Bun error; see `BUILD_SPEC` in `infra/lib/web-stack.ts`. |
+| Amplify build compiles, then fails "do not have the required package(s) installed" (typescript) | The install skipped the repo root, where TypeScript lives. The build spec must run a full `bun install --frozen-lockfile --linker hoisted`, not a `--filter` one. |
+| Amplify build succeeds, then fails "The 'node_modules' folder is missing the 'next' dependency" | Bun's default linker keeps packages in a symlinked store, so `next` is not at the top of `node_modules`. The Amplify install needs `--linker hoisted` (as AWS requires of pnpm workspaces). |
 | First request is slow | Cold start; expected after idle periods. |
 | `cdk deploy` fails "A budget or resource with the same name but a different internalId already exists" | An older version gave the budget a fixed name, so replacing it collided with itself. The stack is left in `UPDATE_ROLLBACK_COMPLETE`, which is fine: update to the current code (the budget has no fixed name now) and deploy again. The old budget is removed and a new one with a generated name replaces it. |

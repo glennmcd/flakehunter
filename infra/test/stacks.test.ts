@@ -275,12 +275,13 @@ describe("WebStack Amplify app", () => {
     });
   });
 
-  it("builds the monorepo's apps/web with Bun, filtering out the other workspaces", () => {
+  it("builds the monorepo's apps/web with Bun after a full, hoisted install that includes the root's TypeScript", () => {
     const spec = String(app("webConnected").Properties.BuildSpec);
     expect(spec).toContain("appRoot: apps/web");
-    expect(spec).toContain(
-      'bun install --frozen-lockfile --filter "@flakehunter/web" --filter "@flakehunter/shared-types"',
-    );
+    // Hoisted, so `next` is at the top of node_modules where Amplify's packaging step looks for it.
+    expect(spec).toMatch(/- bun install --frozen-lockfile --linker hoisted$/m);
+    // A filtered install skips the repo root, where typescript lives, and Next's build then fails.
+    expect(spec).not.toContain("--filter");
     expect(spec).toContain("bun run build");
     expect(spec).toContain("baseDirectory: .next");
     expect(envVar("webConnected", "AMPLIFY_MONOREPO_APP_ROOT")?.Value).toBe("apps/web");

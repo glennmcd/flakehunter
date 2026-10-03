@@ -20,8 +20,12 @@ export interface WebStackProps extends StackProps {
 /**
  * The monorepo build for Amplify Hosting (compute platform, which runs Next.js server rendering). Notes:
  * - `appRoot` points Amplify at apps/web; the install runs at the repo root so the workspace packages resolve.
- * - Amplify installs Bun with npm because its build image has none. `--filter` skips the other workspaces, notably the
- *   CDK app, whose dependencies are large and not needed to build the dashboard.
+ * - Amplify installs Bun with npm because its build image has none. The install is a full one (TypeScript is a
+ *   dependency of the repo root, which Next's build needs; an earlier `--filter` install left the root out) and uses
+ *   the hoisted linker. Bun's default isolated linker keeps packages in a symlinked store with no `next` at the top
+ *   of node_modules, and Amplify's packaging step then fails with "The 'node_modules' folder is missing the 'next'
+ *   dependency". AWS asks for the same thing from pnpm workspaces (`node-linker=hoisted`). Only the Amplify install
+ *   uses it; local installs and CI keep the default.
  * - The server runtime does not see Amplify environment variables on its own, so the build writes the three the
  *   dashboard reads into .env.production, which Next loads at runtime.
  */
@@ -35,7 +39,7 @@ applications:
             - nvm use 22 || nvm install 22
             - npm install --global bun@1.4.2
             - cd ../..
-            - bun install --frozen-lockfile --filter "@flakehunter/web" --filter "@flakehunter/shared-types"
+            - bun install --frozen-lockfile --linker hoisted
             - cd apps/web
         build:
           commands:
