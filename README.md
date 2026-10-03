@@ -4,7 +4,7 @@ Ingests JUnit XML test reports from GitHub Actions, stores results in Postgres, 
 test as flaky when it has both a pass and a fail result on the same commit SHA — regardless of
 which workflow or job produced the result.
 
-Stack: Fastify API (`apps/api`), Next.js dashboard (`apps/web`), Postgres (Neon for dev/prod, PGlite for tests), deployed to AWS (Lambda and Amplify)
+Stack: Fastify API (`apps/api`), Next.js dashboard (`apps/web`), an MCP server (`packages/mcp-server`), Postgres (Neon for dev/prod, PGlite for tests), deployed to AWS (Lambda and Amplify)
 with the CDK app in `infra/`. See `.claude/plans` (or ask for a copy) for the full week-1 design.
 
 ## Setup
@@ -55,6 +55,21 @@ by accident. Basic auth sends the password with every request, so only expose th
 (Amplify Hosting does this for you).
 
 `bun run build:web` makes a production build (CI runs it).
+
+## MCP server (`packages/mcp-server`)
+
+An [MCP](https://modelcontextprotocol.io) server that lets an AI assistant ask FlakeHunter which tests are flaky
+and how a test has failed. It is read-only and calls the API with the read token. Tools: `list_flaky_tests` and
+`get_test_failures`.
+
+With the API running, start it over stdio:
+
+```
+API_BASE_URL=http://localhost:3000 API_TOKEN=<token> bun run --cwd packages/mcp-server start
+```
+
+Configuration, registering it in Claude Code and development notes are in
+[packages/mcp-server/README.md](packages/mcp-server/README.md).
 
 ## Deploying to AWS
 
@@ -140,6 +155,7 @@ Read endpoints use the global `API_TOKEN` as the bearer token. `repo` is a numer
 | `GET /api/repos` | Registered repos (`id`, `fullName`, `owner`, `name`), ordered by name |
 | `GET /api/tests/flaky?repo=&since=&minRuns=` | Tests ranked by flake rate: commits where the test both passed and failed, divided by commits it ran on (skipped ignored; `minRuns` defaults to 5) |
 | `GET /api/tests/:id/history?since=&status=` | Newest-first results for one test, with run details |
+| `GET /api/tests/:id/failures` | The 50 most recent failed or errored results for one test, newest first, with failure message and run details (not paginated) |
 | `GET /api/repos/:id/summary?since=` | Totals for the dashboard: runs, tests, results, pass rate, flaky tests and flaky commits |
 
 Every `/api` error has the same shape:
