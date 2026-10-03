@@ -163,9 +163,11 @@ export class ApiStack extends Stack {
 
   private addBudget(email: string, monthlyUsd: number) {
     const subscribers = [{ subscriptionType: "EMAIL", address: email }];
+    // No budgetName on purpose: budget names are unique per account, and CloudFormation creates a replacement before it
+    // deletes the old budget, so a fixed name makes every replacement fail ("same name but a different internalId").
+    // Left out, AWS generates a unique name each time.
     new CfnBudget(this, "MonthlyBudget", {
       budget: {
-        budgetName: "flakehunter-monthly",
         budgetType: "COST",
         timeUnit: "MONTHLY",
         budgetLimit: { amount: monthlyUsd, unit: "USD" },

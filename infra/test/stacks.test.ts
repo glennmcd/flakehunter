@@ -239,6 +239,13 @@ describe("ApiStack cost budget", () => {
     });
   });
 
+  it("has no fixed name, so a replacement cannot collide with the budget it replaces", () => {
+    const budget = Object.values(scenario("budget").template.findResources("AWS::Budgets::Budget"))[0] as {
+      Properties: { Budget: Record<string, unknown> };
+    };
+    expect(budget.Properties.Budget).not.toHaveProperty("BudgetName");
+  });
+
   it("defaults to 10 USD", () => {
     scenario("budgetDefault").template.hasResourceProperties("AWS::Budgets::Budget", {
       Budget: Match.objectLike({ BudgetLimit: { Amount: 10, Unit: "USD" } }),
