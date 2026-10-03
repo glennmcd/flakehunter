@@ -79,12 +79,22 @@ stack grants it read access to exactly these four and never creates them, so no 
 
 ```bash
 export API_TOKEN="$(openssl rand -hex 32)"            # the dashboard's read token; keep it for step 7
-put() { aws ssm put-parameter --profile flakehunter --region us-east-2 --type SecureString --overwrite \
-          --name "/flakehunter/demo/$1" --value "$2" --query Version --output text; }
+put() { MSYS_NO_PATHCONV=1 aws ssm put-parameter --profile flakehunter --region us-east-2 --type SecureString \
+          --overwrite --name "/flakehunter/demo/$1" --value "$2" --query Version --output text; }
 put DATABASE_URL "$POOLED_DATABASE_URL"
 put API_TOKEN "$API_TOKEN"
 put GITHUB_PAT "$(openssl rand -hex 20)"              # placeholder: the demo does not use the GitHub webhook
 put GITHUB_WEBHOOK_SECRET "$(openssl rand -hex 32)"   # random, so no webhook delivery can ever verify
+```
+
+`MSYS_NO_PATHCONV=1` matters in Git Bash on Windows: without it Git Bash rewrites an argument that starts with `/`
+into a Windows path (`/flakehunter/demo/DATABASE_URL` becomes `C:/.../flakehunter/demo/DATABASE_URL`), and AWS
+rejects it with "Parameter name must be a fully qualified name". It is not needed in PowerShell or on macOS and Linux.
+To see what was stored (names only, nothing decrypted):
+
+```bash
+MSYS_NO_PATHCONV=1 aws ssm get-parameters-by-path --path /flakehunter/demo/ --profile flakehunter \
+  --region us-east-2 --query "Parameters[].Name"
 ```
 
 `GITHUB_PAT` and `GITHUB_WEBHOOK_SECRET` must exist (the API refuses to start without them), but random values make
@@ -129,7 +139,9 @@ bun run --cwd infra cdk diff FlakeHunterApi --profile flakehunter
 bun run --cwd infra cdk deploy FlakeHunterApi --profile flakehunter
 ```
 
-Add `-c reservedConcurrency=N` if step 0 showed room. The outputs include `ApiUrl`, `FunctionName` and
+Add `-c reservedConcurrency=N` if step 0 showed room (10 suits the default throttle). If you skipped it, add it later by
+running the same `cdk deploy` with the flag; CDK changes the function in place. Keep every context value in
+`~/.cdk.json` so later deploys do not drop one. The outputs include `ApiUrl`, `FunctionName` and
 `RateLimitTableName`. The budget emails ask you to confirm the subscription; do it.
 
 Verify:
@@ -335,3 +347,4 @@ settings, never in a browser.
 | `cdk deploy` fails "Specified ReservedConcurrentExecutions ... decreases ... UnreservedConcurrentExecution" | Remove `reservedConcurrency`; the account's quota is too small to reserve any (step 0). |
 | Amplify build fails at `bun install` | Check the log for the Bun or filter error; see `BUILD_SPEC` in `infra/lib/web-stack.ts`. |
 | First request is slow | Cold start; expected after idle periods. |
+| `cdk deploy` fails "A budget or resource with the same name but a different internalId already exists" | An older version gave the budget a fixed name, so replacing it collided with itself. The stack is left in `UPDATE_ROLLBACK_COMPLETE`, which is fine: update to the current code (the budget has no fixed name now) and deploy again. The old budget is removed and a new one with a generated name replaces it. |
