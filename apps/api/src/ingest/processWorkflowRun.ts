@@ -5,6 +5,7 @@ import { downloadArtifactZip, listRunArtifacts } from "../github/artifacts.js";
 import type { GithubClient } from "../github/client.js";
 import { insertParsedSuites, summarizeSuites } from "./insertParsedSuites.js";
 import { parseJunitXml } from "./junitParser.js";
+import { ArtifactRejectedError, MAX_ARTIFACT_ZIP_BYTES } from "./limits.js";
 import { extractXmlFiles } from "./zipExtract.js";
 
 /** Report key used for results ingested from a GitHub artifact, so uploads can use their own keys. */
@@ -64,16 +65,21 @@ export async function processWorkflowRun(db: AnyDb, github: GithubClient, input:
     runId: input.githubRunId,
   });
 
-  const artifact = artifacts[0];
+  const artifact = artifacts.find((a) => !a.expired);
   if (!artifact) {
     await db.update(workflowRuns).set({ artifactsFetchedAt: sql`now()` }).where(eq(workflowRuns.id, run.id));
     return;
+  }
+  // The artifact is whatever the workflow uploaded, so refuse a large one before downloading it.
+  if (artifact.sizeInBytes > MAX_ARTIFACT_ZIP_BYTES) {
+    throw new ArtifactRejectedError(`artifact is larger than ${MAX_ARTIFACT_ZIP_BYTES} bytes`);
   }
 
   const zipBuffer = await downloadArtifactZip(github, {
     owner: input.owner,
     repo: input.repo,
     artifactId: artifact.id,
+    maxBytes: MAX_ARTIFACT_ZIP_BYTES,
   });
 
   const suites = extractXmlFiles(new Uint8Array(zipBuffer)).flatMap((xmlFile) =>

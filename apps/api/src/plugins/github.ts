@@ -8,7 +8,16 @@ declare module "fastify" {
   }
 }
 
-const githubPlugin: FastifyPluginAsync = async (fastify) => {
+export interface GithubPluginOptions {
+  /** Use this client instead of one built from GITHUB_PAT (tests pass a fake). */
+  client?: GithubClient;
+}
+
+const githubPlugin: FastifyPluginAsync<GithubPluginOptions> = async (fastify, options) => {
+  if (options.client) {
+    fastify.decorate("github", options.client);
+    return;
+  }
   const pat = process.env.GITHUB_PAT;
   if (!pat) {
     throw new Error("GITHUB_PAT is not set");

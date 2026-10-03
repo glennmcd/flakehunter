@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
 import type { AnyDb, Db } from "./db/client.js";
+import type { GithubClient } from "./github/client.js";
 import authPlugin from "./plugins/auth.js";
 import dbPlugin from "./plugins/db.js";
 import errorHandlerPlugin from "./plugins/errorHandler.js";
@@ -14,6 +15,8 @@ export interface BuildAppOptions {
   logger?: boolean;
   /** Override the upload rate limit (tests); by default it comes from the environment. */
   rateLimit?: RateLimitPluginOptions;
+  /** Use this GitHub client instead of one built from GITHUB_PAT (tests pass a fake). */
+  github?: GithubClient;
 }
 
 export async function buildApp(options: BuildAppOptions = {}) {
@@ -30,7 +33,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     await fastify.register(dbPlugin);
   }
   await fastify.register(authPlugin);
-  await fastify.register(githubPlugin);
+  await fastify.register(githubPlugin, { client: options.github });
   await fastify.register(rateLimitPlugin, options.rateLimit ?? {});
   await registerRoutes(fastify);
 
