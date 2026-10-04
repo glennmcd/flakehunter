@@ -45,6 +45,36 @@ Then detach it:
 aws organizations detach-policy --profile flakehunter-mgmt --policy-id <p-id> --target-id 222222222222
 ```
 
+### The same steps as scripts
+
+`scripts/scp-apply-guardrails.sh` and `scripts/scp-rollback-guardrails.sh` do the commands above for you, with the
+checks the manual steps leave to you. Sign in to the management account first (`aws login --profile flakehunter-mgmt`).
+Both stop without changing anything unless the profile really is the management account (`111111111111`), and the
+apply script also stops if the account already has 5 SCPs attached.
+
+See what would happen first. This only reads from AWS:
+
+```bash
+bash scripts/scp-apply-guardrails.sh --dry-run
+```
+
+Apply the policy. It creates `FlakeHunterGuardrails` or updates it from the JSON file, attaches it, and asks you to
+type `yes` first (`--yes` skips the question). Running it again is safe:
+
+```bash
+bash scripts/scp-apply-guardrails.sh
+```
+
+Roll back by detaching the policy. The policy itself is kept, so applying again is quick:
+
+```bash
+bash scripts/scp-rollback-guardrails.sh
+```
+
+Add `--delete` to the rollback to delete the policy as well. Settings such as the profile, the target account and the
+policy file are `FH_*` environment variables, listed at the top of `scripts/scp-common.sh`. The scripts are tested
+against a fake `aws`, not against a real Organization, so run `--dry-run` first.
+
 ## 2. `flakehunter-budget-freeze.json` (attached by a budget action, never by hand)
 
 Denies everything except reading, deleting, and the actions needed to recover (STS, billing, `lambda:PutFunctionConcurrency`,
@@ -154,6 +184,29 @@ aws lambda delete-function-concurrency --profile flakehunter --region us-east-2 
 Do both only after fixing whatever caused the spend, or raise `monthlyBudgetUsd` and redeploy; the budget resets
 on the first of the month.
 
+### The same recovery as a script
+
+`scripts/scp-rollback-freeze.sh` does both steps. Sign in to both accounts first (`aws login --profile flakehunter-mgmt`
+and `aws login --profile flakehunter`). It checks both accounts before it changes either, finds the function name
+from the stack's `FunctionName` output, and asks you to type `yes` (`--yes` skips the question).
+
+See what it would do. This only reads from AWS:
+
+```bash
+bash scripts/scp-rollback-freeze.sh --dry-run
+```
+
+Lift the freeze and let the API run again:
+
+```bash
+bash scripts/scp-rollback-freeze.sh
+```
+
+It only removes a reserved concurrency of exactly 0, which is what the kill switch sets. A larger number is a cap you
+chose with `-c reservedConcurrency=N`, so it stays. If only one part applies, `--scp-only` skips the `flakehunter`
+account entirely and `--concurrency-only` skips the management account. Like the apply and rollback scripts it is
+tested against a fake `aws`, not a real Organization, so run `--dry-run` first.
+
 ## Verifying what has not been tested
 
 Claude validated the policy documents (Access Analyzer, no findings) and the CDK output (unit tests, `cdk synth`).
@@ -201,17 +254,33 @@ If a denial is unclear, find the call and its error in CloudTrail:
    then `describe-subscribers-for-notification` (same `--profile` and `--account-id`) for the 100% ACTUAL one. Expect an EMAIL and an SNS subscriber.
 2. **The topic reaches the function.** Run `aws sns list-subscriptions-by-topic --profile flakehunter --topic-arn <BudgetStopTopic arn>`:
    one `lambda` subscription, with a confirmed (non-pending) ARN.
-3. **The stop function works end to end** (this stops the real API, so do it when nothing depends on it):
+3. **The stop function works end to end** (this stops the real API, so do it when nothing depends on it). First look
+   up the stop function's name. The stack generates the names of its functions and log groups, so there is no fixed
+   `/aws/lambda/<name>` log group to guess:
+
+   ```bash
+   aws cloudformation list-stack-resources --profile flakehunter --region us-east-2 --stack-name FlakeHunterApi --query "StackResourceSummaries[?starts_with(LogicalResourceId,'BudgetStopFunction')&&ResourceType=='AWS::Lambda::Function'].PhysicalResourceId" --output text
+   ```
+
+   Then ask that function for its log group:
+
+   ```bash
+   aws lambda get-function-configuration --profile flakehunter --region us-east-2 --function-name <BudgetStopFunction name> --query LoggingConfig.LogGroup --output text
+   ```
+
+   Now run the test, using that log group as `<BudgetStopFunction log group>`:
+
    ```bash
    aws sns publish --profile flakehunter --region us-east-2 --topic-arn <BudgetStopTopic arn> --message test   # stands in for the budget
    aws lambda get-function-concurrency --profile flakehunter --region us-east-2 --function-name <fn>          # ReservedConcurrentExecutions: 0
    curl -i <api>/health                                                                  # now fails (expect a 5xx)
-   aws logs tail --profile flakehunter /aws/lambda/<BudgetStopFunction name> --since 5m                        # "set to 0"
+   aws logs tail --profile flakehunter --region us-east-2 <BudgetStopFunction log group> --since 5m           # "set to 0"
    aws lambda delete-function-concurrency --profile flakehunter --region us-east-2 --function-name <fn>       # undo
    curl -i <api>/health                                                                  # 200 again
    ```
+
    Publishing yourself works because the function ignores the message and your IAM permissions allow `sns:Publish`.
-   If `get-function-concurrency` shows nothing, read the function's log for an `AccessDenied` or a quota error. On an
+   If `get-function-concurrency` shows nothing, read that log group for an `AccessDenied` or a quota error. On an
    account whose quota leaves no room to reserve concurrency, setting it can be refused; "Stopping a flood" in
    `docs/deployment.md` explains the fallback.
 4. **The real trigger (AWS Budgets publishing to the topic)** cannot be forced. Budget data refreshes only a few

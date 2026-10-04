@@ -156,8 +156,18 @@ curl -s -H "authorization: Bearer $API_TOKEN" "$API_URL/api/repos"     # the dem
 ```
 
 The first request after a quiet period takes about a second longer (a cold start that also reads the secrets).
-If it returns a 500, read the function's log group `/aws/lambda/<FunctionName>`; "Could not load secrets from SSM"
-names the parameter that is missing.
+If it returns a 500, read the function's log; "Could not load secrets from SSM" names the parameter that is missing.
+The stack gives the log group a generated name (it is not `/aws/lambda/<FunctionName>`), so ask the function for it:
+
+```bash
+aws lambda get-function-configuration --profile flakehunter --region us-east-2 --function-name <FunctionName output> --query LoggingConfig.LogGroup --output text
+```
+
+Then read the last 15 minutes, using that name as `<log group>`:
+
+```bash
+aws logs tail --profile flakehunter --region us-east-2 <log group> --since 15m
+```
 
 ## 7. Seed the demo history
 
