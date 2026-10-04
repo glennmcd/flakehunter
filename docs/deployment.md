@@ -17,6 +17,9 @@ curl / CI ──▶ API Gateway HTTP API ──▶ Lambda (Fastify) ──▶ Ne
 Commands assume Git Bash from the repository root. Nothing here is run for you: deploying changes your AWS project
 and costs money, so each step is yours to run and check.
 
+Steps 0 to 8 build everything from nothing. If the stacks already exist and you are deploying from a new clone or a new
+GitHub repository, go to "Deploying from a new clone or repository" after step 8.
+
 ## 0. Before you start
 
 - **Spend limit and budget.** In AWS Settings (settings.aws.com) check your project's billing and spend limit. The
@@ -24,7 +27,8 @@ and costs money, so each step is yours to run and check.
   and at 100% actual **stops the API** by setting its reserved concurrency to 0 (see "Stopping a flood"); you turn it
   on with `-c alertEmail=...` in step 6. Do not deploy without it. Organization-level guardrails (SCPs) are in
   `infra/scp/`.
-- **Tools.** `bun install` at the repo root; Node 22 or newer (the CDK app runs under Node); the AWS CLI signed in:
+- **Tools.** `bun install` at the repo root (the CDK CLI is installed by it; without it every `cdk` command fails with
+  "Cannot find module"); Node 22 or newer (the CDK app runs under Node); the AWS CLI signed in:
   ```bash
   aws login --region us-east-2 --profile flakehunter
   aws sts get-caller-identity --profile flakehunter     # shows the project and role
@@ -208,6 +212,145 @@ curl -si "$SITE_URL" | head -3                      # 401 with a WWW-Authenticat
 curl -s -u any:the-password "$SITE_URL/repos/1" | head -c 200      # the overview page (find the id with /?list=1)
 ```
 
+Every page ends with a version line such as `v0.0.2 · a1b2c3d`: the `version` in `apps/web/package.json` and the first
+7 digits of the commit Amplify built. Check that it names the commit you pushed:
+
+```bash
+curl -s -u any:the-password "$SITE_URL/" | grep -o 'v[0-9][^<]*'
+```
+
+If only `v0.0.2` shows, with no commit, Amplify did not provide `AWS_COMMIT_ID` to the build. The dashboard still works;
+the commit is just not shown. Bump the version in `apps/web/package.json` when you release.
+
+## Deploying from a new clone or repository
+
+Use this when steps 0 to 8 are already done (the stacks `FlakeHunterApi` and `FlakeHunterWeb` exist) and the code now
+comes from a different checkout, for example a clean repository. Steps 1 to 5 are not repeated: the Neon branch, the
+four parameters, the GitHub token secret and the CDK bootstrap all stay where they are. What ties a checkout to the
+existing resources is the **stack names**, plus your user-level `~/.cdk.json` context, which is not part of any
+repository.
+
+### A. Check the new clone (nothing touches AWS)
+
+A clean clone has none of the git-ignored files: `node_modules`, the `.env` files and the build output (`infra/dist`,
+`infra/cdk.out`). The deploy needs only the first and the last, and `cdk` rebuilds the bundle itself. The `.env` files
+matter only for running locally (copy them from the `.env.example` files).
+
+```bash
+bun install --frozen-lockfile
+```
+
+Do this first. Without it `cdk` cannot start at all, because the CDK CLI itself is a dependency of `infra/`. The
+symptom is `Cannot find module '...\infra\node_modules\aws-cdk\bin\cdk'` from any `bun run --cwd infra cdk ...`
+command. Check that it worked:
+
+```bash
+ls infra/node_modules/aws-cdk/bin/cdk
+```
+
+Run the same checks CI runs. A deploy from a clone that fails them is not worth starting:
+
+```bash
+bun run lint && bun run typecheck && bun run test
+```
+
+Bundle the Lambda and synthesize both stacks. This deploys nothing:
+
+```bash
+bun run synth:infra
+```
+
+### B. Update the API stack
+
+Sign in again if the session expired (`aws login --region us-east-2 --profile flakehunter`), then see what would
+change:
+
+```bash
+bun run --cwd infra cdk diff --profile flakehunter
+```
+
+Read it before you deploy anything:
+
+- **No changes, or only changes you made in the code:** expected.
+- **The stack would be created:** you are in the wrong account or Region. Stop.
+- **The budget, the `BudgetStop*` resources or the alert email would be deleted:** `alertEmail` is missing from
+  `~/.cdk.json` (step 6). Stop and fix the context, or the deploy removes the cost guardrails.
+- **Only the budget changes, and its notification address differs (`may be replaced`):** `alertEmail` in
+  `~/.cdk.json` is not the address the deployed budget has. That is expected after you change it. CloudFormation
+  creates the new budget before it deletes the old one, and the new address gets a subscription confirmation
+  email that you must accept: until you do, the 80% and 100% alerts do not reach you. The kill switch is not affected.
+- **The diff lists IAM changes:** CDK asks you to approve them. Read them; do not skip the prompt.
+
+If the `FlakeHunterApi` part of the diff is empty, there is nothing to deploy. Otherwise:
+
+```bash
+bun run --cwd infra cdk deploy FlakeHunterApi --profile flakehunter
+```
+
+Then repeat the checks at the end of step 6 (`/health`, a 401 without the token, the demo repository with it). If an
+organization SCP is attached to the account (`infra/scp/`), a deploy that creates something it does not allow fails
+with `explicit deny in a service control policy`; the message names the action to add to the allow-list.
+
+### C. Connect the dashboard to the new GitHub repository
+
+Amplify registers its webhook on the repository it was connected to when the app was created. If the code moved to a
+new repository, even one with **the same name and URL**, that webhook stays with the old repository (it follows
+the old one when you rename it). Pushes to the new repository then build nothing. `cdk diff` does not show it either:
+when the URL is unchanged, the `FlakeHunterWeb` template is unchanged.
+
+Check whether the new repository has an Amplify webhook. This prints only the host of each webhook, because the
+full URL carries a token:
+
+```bash
+gh api repos/<owner>/<repo>/hooks --jq '.[].config.url | capture("^(?<host>https?://[^/?]+)").host'
+```
+
+Amplify's webhook shows as `https://amplify-webhooks.us-east-2.amazonaws.com`. If it is there, skip to the
+verification below. If there is none (a new repository starts with no webhooks), recreate the dashboard stack. It holds no data; the
+API, the database and the secrets are not touched. Creating an Amplify app with a repository and a token is what
+registers the webhook, so a recreate is the dependable way to get one.
+
+The GitHub token in the `flakehunter/github-token` secret must be able to see the new repository: a classic token
+with `repo` and `admin:repo_hook` covers every repository you own, but a fine-grained token lists specific
+repositories and needs the new one added. Then:
+
+```bash
+bun run --cwd infra cdk destroy FlakeHunterWeb --profile flakehunter
+```
+
+Deploy it again with the command from step 8 (the same two `--parameters`, and `-c repository=` set to the new
+repository's URL, which is already in `~/.cdk.json` if you added the `-c` flags there):
+
+```bash
+bun run --cwd infra cdk deploy FlakeHunterWeb --profile flakehunter \
+  --parameters FlakeHunterWeb:ApiToken="$API_TOKEN" \
+  --parameters FlakeHunterWeb:SitePassword='<the site password>' \
+  -c repository=https://github.com/<owner>/<repo> -c githubTokenSecretName=flakehunter/github-token
+```
+
+The recreated app has a new id, so the `SiteUrl` output changes. Update any bookmark or link that holds the old one.
+`ApiToken` is the same value as the `API_TOKEN` parameter; read it back from your password manager, or rotate it (see
+"Rotate a secret") if you no longer have it.
+
+Verify, as in step 8, and confirm the webhook now exists on the new repository (the command above) and that a push
+starts a build:
+
+```bash
+aws amplify list-jobs --profile flakehunter --region us-east-2 --app-id <AmplifyAppId output> --branch-name main --max-results 3
+```
+
+Last, look at the old repository's webhooks and delete any Amplify one that is left:
+
+```bash
+gh api repos/<owner>/<old-repo>/hooks --jq '.[] | {id, host: (.config.url | capture("^(?<h>https?://[^/?]+)").h)}'
+```
+
+### D. Afterwards
+
+Clear the secrets from your shell (`unset API_TOKEN DIRECT_DATABASE_URL POOLED_DATABASE_URL`) and keep `~/.cdk.json`:
+it is what makes the next deploy from any clone see the same context. The old repository can stay private as an
+archive; nothing deployed refers to it any more.
+
 ## Day-two operations
 
 **Rotate a secret.** Overwrite the parameter (`put` from step 3), then make Lambda start fresh execution environments,
@@ -382,5 +525,7 @@ settings, never in a browser.
 | Amplify build fails at `bun install` | Check the log for the Bun error; see `BUILD_SPEC` in `infra/lib/web-stack.ts`. |
 | Amplify build compiles, then fails "do not have the required package(s) installed" (typescript) | The install skipped the repo root, where TypeScript lives. The build spec must run a full `bun install --frozen-lockfile --linker hoisted`, not a `--filter` one. |
 | Amplify build succeeds, then fails "The 'node_modules' folder is missing the 'next' dependency" | Bun's default linker keeps packages in a symlinked store, so `next` is not at the top of `node_modules`. The Amplify install needs `--linker hoisted` (as AWS requires of pnpm workspaces). |
+| `bun run --cwd infra cdk ...` fails "Cannot find module '...\infra\node_modules\aws-cdk\bin\cdk'" | The dependencies are not installed, typical in a fresh clone (`node_modules` is git-ignored). Run `bun install --frozen-lockfile` at the repository root, then retry. |
 | First request is slow | Cold start; expected after idle periods. |
+| Pushes to the new GitHub repository do not start an Amplify build | The webhook is still on the old repository, and `cdk diff` shows nothing because the URL is the same. See "Deploying from a new clone or repository", section C: recreate `FlakeHunterWeb`. |
 | `cdk deploy` fails "A budget or resource with the same name but a different internalId already exists" | An older version gave the budget a fixed name, so replacing it collided with itself. The stack is left in `UPDATE_ROLLBACK_COMPLETE`, which is fine: update to the current code (the budget has no fixed name now) and deploy again. The old budget is removed and a new one with a generated name replaces it. |

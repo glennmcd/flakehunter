@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { SiteFooter } from "../components/SiteFooter";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
         {children}
+        <SiteFooter version={process.env.APP_VERSION} commit={process.env.APP_COMMIT} />
       </body>
     </html>
   );
