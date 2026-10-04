@@ -201,7 +201,14 @@ curl -s -u any:the-password "$SITE_URL/repos/1" | head -c 200      # the overvie
 ## Day-two operations
 
 **Rotate a secret.** Overwrite the parameter (`put` from step 3), then make Lambda start fresh execution environments,
-which re-read the secrets (any configuration change does this):
+which re-read the secrets (any configuration change does this). First look up the function name, which is the
+`FunctionName` output of the `FlakeHunterApi` stack:
+
+```bash
+aws cloudformation describe-stacks --profile flakehunter --region us-east-2 --stack-name FlakeHunterApi --query "Stacks[0].Outputs[?OutputKey=='FunctionName'].OutputValue" --output text
+```
+
+Then use it as `<FunctionName output>`:
 
 ```bash
 aws lambda update-function-configuration --profile flakehunter --region us-east-2 \
@@ -303,10 +310,22 @@ Layers, from fastest and cheapest to blunt:
 by hours, so it caps a slow overrun, not a flood. To resume after it fires, run the `delete-function-concurrency`
 command below. A CloudWatch alarm on the request count would react faster but is not built. If you are being
 flooded now: set the function's concurrency to 0 to stop all invocations,
-then restore it when it is over:
+then restore it when it is over. First look up the function name, which is the `FunctionName` output of the
+`FlakeHunterApi` stack:
 
 ```bash
-aws lambda put-function-concurrency --profile flakehunter --region us-east-2   --function-name <FunctionName output> --reserved-concurrent-executions 0
+aws cloudformation describe-stacks --profile flakehunter --region us-east-2 --stack-name FlakeHunterApi --query "Stacks[0].Outputs[?OutputKey=='FunctionName'].OutputValue" --output text
+```
+
+Then use it as `<FunctionName output>`. Stop the API:
+
+```bash
+aws lambda put-function-concurrency --profile flakehunter --region us-east-2 --function-name <FunctionName output> --reserved-concurrent-executions 0
+```
+
+Restore it when the flood is over:
+
+```bash
 aws lambda delete-function-concurrency --profile flakehunter --region us-east-2 --function-name <FunctionName output>
 ```
 
