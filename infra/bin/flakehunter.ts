@@ -30,7 +30,7 @@ const throttle =
 const api = new ApiStack(app, "FlakeHunterApi", {
   env,
   description: "FlakeHunter API: Lambda behind an API Gateway HTTP API",
-  // Pass with: cdk deploy -c alertEmail=you@example.com [-c monthlyBudgetUsd=10] [-c reservedConcurrency=5]
+  // Pass with: cdk deploy -c alertEmail=you@example.com [-c monthlyBudgetUsd=30] [-c reservedConcurrency=5]
   //   [-c throttleRate=10 -c throttleBurst=20]
   alertEmail: app.node.tryGetContext("alertEmail"),
   monthlyBudgetUsd: number("monthlyBudgetUsd"),

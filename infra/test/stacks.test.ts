@@ -223,7 +223,7 @@ describe("ApiStack permissions", () => {
 });
 
 describe("ApiStack cost budget", () => {
-  it("creates an account budget that emails at 80% actual and 100% forecast spend", () => {
+  it("creates an account budget that emails at 80% actual and 100% forecast spend, and stops the API at 100% actual", () => {
     scenario("budget").template.hasResourceProperties("AWS::Budgets::Budget", {
       Budget: Match.objectLike({ BudgetType: "COST", TimeUnit: "MONTHLY", BudgetLimit: { Amount: 25, Unit: "USD" } }),
       NotificationsWithSubscribers: [
@@ -234,6 +234,13 @@ describe("ApiStack cost budget", () => {
         Match.objectLike({
           Notification: Match.objectLike({ NotificationType: "FORECASTED", Threshold: 100 }),
           Subscribers: [{ SubscriptionType: "EMAIL", Address: "me@example.com" }],
+        }),
+        Match.objectLike({
+          Notification: Match.objectLike({ NotificationType: "ACTUAL", Threshold: 100 }),
+          Subscribers: [
+            { SubscriptionType: "EMAIL", Address: "me@example.com" },
+            { SubscriptionType: "SNS", Address: { Ref: Match.stringLikeRegexp("BudgetStopTopic") } },
+          ],
         }),
       ],
     });
@@ -246,15 +253,57 @@ describe("ApiStack cost budget", () => {
     expect(budget.Properties.Budget).not.toHaveProperty("BudgetName");
   });
 
-  it("defaults to 10 USD", () => {
+  it("defaults to 30 USD", () => {
     scenario("budgetDefault").template.hasResourceProperties("AWS::Budgets::Budget", {
-      Budget: Match.objectLike({ BudgetLimit: { Amount: 10, Unit: "USD" } }),
+      Budget: Match.objectLike({ BudgetLimit: { Amount: 30, Unit: "USD" } }),
+    });
+  });
+
+  it("grants publish on the stop topic to AWS Budgets in this account, and to no other principal", () => {
+    scenario("budget").template.hasResourceProperties("AWS::SNS::TopicPolicy", {
+      PolicyDocument: {
+        Statement: [
+          Match.objectLike({
+            Action: "sns:Publish",
+            Effect: "Allow",
+            Principal: { Service: "budgets.amazonaws.com" },
+            Condition: { StringEquals: { "aws:SourceAccount": ACCOUNT }, ArnLike: Match.anyValue() },
+          }),
+        ],
+      },
+    });
+    // The ARN carries the partition as a token, so check its rendered pieces rather than one string.
+    const policy = Object.values(scenario("budget").template.findResources("AWS::SNS::TopicPolicy"))[0];
+    const arn = JSON.stringify(policy).match(/budgets::.*?\*/)?.[0];
+    expect(arn).toContain(ACCOUNT);
+  });
+
+  it("gives the stop function permission to set concurrency on the API function only", () => {
+    const { template } = scenario("budget");
+    const policies = Object.values(template.findResources("AWS::IAM::Policy")) as {
+      Properties: {
+        PolicyName: string;
+        PolicyDocument: { Statement: { Action: string | string[]; Resource: unknown }[] };
+      };
+    }[];
+    const stop = policies.find((p) => p.Properties.PolicyName.includes("BudgetStopFunction"));
+    expect(stop).toBeDefined();
+    const statements = (stop?.Properties.PolicyDocument.Statement ?? []).filter(
+      (s) => s.Action === "lambda:PutFunctionConcurrency",
+    );
+    expect(statements).toHaveLength(1);
+    expect(JSON.stringify(statements[0]?.Resource)).toContain("ApiFunction");
+    expect(JSON.stringify(statements[0]?.Resource)).not.toContain('"*"');
+    template.hasResourceProperties("AWS::Lambda::Function", {
+      Environment: { Variables: { FUNCTION_NAME: { Ref: Match.stringLikeRegexp("^ApiFunction") } } },
+      Handler: "index.handler",
     });
   });
 
   it("creates no budget without an email, and warns so it is not forgotten", () => {
     const { template, warnings } = scenario("defaults");
     template.resourceCountIs("AWS::Budgets::Budget", 0);
+    template.resourceCountIs("AWS::SNS::Topic", 0);
     expect(warnings.some((w) => w.includes("alertEmail"))).toBe(true);
     expect(scenario("budget").warnings.some((w) => w.includes("alertEmail"))).toBe(false);
   });

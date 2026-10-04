@@ -20,8 +20,10 @@ and costs money, so each step is yours to run and check.
 ## 0. Before you start
 
 - **Spend limit and budget.** In AWS Settings (settings.aws.com) check your project's billing and spend limit. The
-  stack also creates an account budget that emails you at 80% of the monthly amount (actual) and 100% (forecast); you
-  turn it on with `-c alertEmail=...` in step 6. Do not deploy without it.
+  stack also creates an account budget (default $30 a month) that emails you at 80% (actual) and 100% (forecast),
+  and at 100% actual **stops the API** by setting its reserved concurrency to 0 (see "Stopping a flood"); you turn it
+  on with `-c alertEmail=...` in step 6. Do not deploy without it. Organization-level guardrails (SCPs) are in
+  `infra/scp/`.
 - **Tools.** `bun install` at the repo root; Node 22 or newer (the CDK app runs under Node); the AWS CLI signed in:
   ```bash
   aws login --region us-east-2 --profile flakehunter
@@ -129,7 +131,7 @@ Put your settings where they are not forgotten. A user-level `~/.cdk.json` keeps
 every later deploy sees the same context (a deploy without `alertEmail` would delete the budget):
 
 ```json
-{ "context": { "alertEmail": "you@example.com", "monthlyBudgetUsd": 10 } }
+{ "context": { "alertEmail": "you@example.com", "monthlyBudgetUsd": 30 } }
 ```
 
 Then look before you leap:
@@ -296,8 +298,11 @@ Layers, from fastest and cheapest to blunt:
    budget actions can only apply IAM or SCP policies, stop EC2 or RDS instances, or start an SSM automation, and
    budget data refreshes only a few times a day, so a budget cannot react to a flood in time.
 
-An automatic kill switch (a CloudWatch alarm on the request count that sets the function's reserved concurrency to 0)
-is possible but not built. If you are being flooded now: set the function's concurrency to 0 to stop all invocations,
+**Budget kill switch.** At 100% of the monthly budget (actual spend) the budget publishes to an SNS topic and the
+`BudgetStopFunction` sets the API function's reserved concurrency to 0 (`infra/lambda/budget-stop`). Budget data lags
+by hours, so it caps a slow overrun, not a flood. To resume after it fires, run the `delete-function-concurrency`
+command below. A CloudWatch alarm on the request count would react faster but is not built. If you are being
+flooded now: set the function's concurrency to 0 to stop all invocations,
 then restore it when it is over:
 
 ```bash
@@ -327,7 +332,7 @@ settings, never in a browser.
 | Secrets Manager | `flakehunter/github-token` | GitHub token Amplify uses to read the repository |
 | CloudFormation parameter | `FlakeHunterWeb:ApiToken` | same as the `API_TOKEN` parameter |
 | CloudFormation parameter | `FlakeHunterWeb:SitePassword` | the dashboard gate, 8 or more characters |
-| CDK context (`~/.cdk.json` or `-c`) | `alertEmail`, `monthlyBudgetUsd` | budget alert address and amount (default 10) |
+| CDK context (`~/.cdk.json` or `-c`) | `alertEmail`, `monthlyBudgetUsd` | budget alert address and amount (default 30) |
 | CDK context | `reservedConcurrency` | optional Lambda concurrency cap |
 | CDK context | `throttleRate`, `throttleBurst` | API requests per second and burst (defaults 10 and 20); the hard cap on flood cost |
 | CDK context | `repository`, `githubTokenSecretName`, `branch` | the GitHub source for Amplify |

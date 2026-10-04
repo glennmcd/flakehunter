@@ -6,13 +6,18 @@ import { HttpApi, HttpStage, LogGroupLogDestination } from "aws-cdk-lib/aws-apig
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { CfnBudget } from "aws-cdk-lib/aws-budgets";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
-import { PolicyStatement } from "aws-cdk-lib/aws-iam";
+import { PolicyStatement, ServicePrincipal } from "aws-cdk-lib/aws-iam";
 import { Architecture, Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
+import { Topic } from "aws-cdk-lib/aws-sns";
+import { LambdaSubscription } from "aws-cdk-lib/aws-sns-subscriptions";
 import type { Construct } from "constructs";
 
 /** Where `bun run scripts/bundle-api.ts` writes the bundled Lambda (cdk.json runs it before every synth). */
 const DEFAULT_CODE_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist/api");
+
+/** The budget kill switch Lambda (sets the API function's reserved concurrency to 0); see addBudget. */
+const BUDGET_STOP_CODE_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../lambda/budget-stop");
 
 /**
  * The SSM parameters the API reads at start-up, as `<prefix><NAME>`. Must match SECRET_NAMES in
@@ -30,7 +35,10 @@ export interface ApiStackProps extends StackProps {
   parameterPrefix?: string;
   /** Email for the cost budget alerts. Without one no budget is created and synth prints a warning. */
   alertEmail?: string;
-  /** Monthly cost, in USD, at which the budget alerts (80% actual, 100% forecast). Covers the whole account. */
+  /**
+   * Monthly cost, in USD (default 30). The budget emails at 80% actual and 100% forecast, and at 100% actual it also
+   * stops the API by setting its reserved concurrency to 0. Covers the whole account.
+   */
   monthlyBudgetUsd?: number;
   /**
    * Steady and burst requests per second the HTTP API accepts, across all callers; over it API Gateway answers 429
@@ -141,7 +149,7 @@ export class ApiStack extends Stack {
     this.httpApiUrl = httpApi.apiEndpoint;
 
     if (props.alertEmail) {
-      this.addBudget(props.alertEmail, props.monthlyBudgetUsd ?? 10);
+      this.addBudget(props.alertEmail, props.monthlyBudgetUsd ?? 30);
     } else {
       Annotations.of(this).addWarningV2(
         "flakehunter:no-budget",
@@ -163,6 +171,40 @@ export class ApiStack extends Stack {
 
   private addBudget(email: string, monthlyUsd: number) {
     const subscribers = [{ subscriptionType: "EMAIL", address: email }];
+
+    // Kill switch: at 100% actual spend the budget publishes here and a small Lambda sets the API function's reserved
+    // concurrency to 0, which stops every invocation (an SCP cannot: API Gateway calls Lambda as a service principal).
+    // The topic policy lets AWS Budgets in this account publish (and no other account); IAM principals in this account
+    // can publish through their own permissions. Undo with `aws lambda delete-function-concurrency`.
+    const stopTopic = new Topic(this, "BudgetStopTopic");
+    stopTopic.addToResourcePolicy(
+      new PolicyStatement({
+        actions: ["sns:Publish"],
+        principals: [new ServicePrincipal("budgets.amazonaws.com")],
+        resources: [stopTopic.topicArn],
+        conditions: {
+          StringEquals: { "aws:SourceAccount": this.account },
+          ArnLike: { "aws:SourceArn": `arn:${this.partition}:budgets::${this.account}:*` },
+        },
+      }),
+    );
+    const stopFunction = new LambdaFunction(this, "BudgetStopFunction", {
+      code: Code.fromAsset(BUDGET_STOP_CODE_PATH),
+      handler: "index.handler",
+      runtime: Runtime.NODEJS_22_X,
+      architecture: Architecture.ARM_64,
+      memorySize: 128,
+      timeout: Duration.seconds(30),
+      logGroup: new LogGroup(this, "BudgetStopLogs", {
+        retention: RetentionDays.TWO_WEEKS,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+      environment: { FUNCTION_NAME: this.apiFunction.functionName },
+    });
+    stopFunction.addToRolePolicy(
+      new PolicyStatement({ actions: ["lambda:PutFunctionConcurrency"], resources: [this.apiFunction.functionArn] }),
+    );
+    stopTopic.addSubscription(new LambdaSubscription(stopFunction));
     // No budgetName on purpose: budget names are unique per account, and CloudFormation creates a replacement before it
     // deletes the old budget, so a fixed name makes every replacement fail ("same name but a different internalId").
     // Left out, AWS generates a unique name each time.
@@ -190,6 +232,15 @@ export class ApiStack extends Stack {
             thresholdType: "PERCENTAGE",
           },
           subscribers,
+        },
+        {
+          notification: {
+            notificationType: "ACTUAL",
+            comparisonOperator: "GREATER_THAN",
+            threshold: 100,
+            thresholdType: "PERCENTAGE",
+          },
+          subscribers: [...subscribers, { subscriptionType: "SNS", address: stopTopic.topicArn }],
         },
       ],
     });
