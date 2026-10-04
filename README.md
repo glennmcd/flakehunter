@@ -235,3 +235,7 @@ currently flagged as flaky.
 - Only `workflow_run` `completed` events are handled
 - Auth is a single static bearer token — no per-user accounts or OAuth
 - `flaky_tests` is a live SQL view, not a materialized/refreshed table
+
+## License
+
+[MIT](LICENSE).
