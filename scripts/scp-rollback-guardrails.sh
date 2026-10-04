@@ -10,7 +10,8 @@
 # By default the policy itself is kept, so scripts/scp-apply-guardrails.sh can attach it again. --delete removes it
 # for good; AWS refuses that while the policy is still attached to anything else. Stops without changing anything if the
 # profile is not the management account. Safe to run again: a policy that is missing or already detached is not an
-# error. Settings (profile, ids) are the FH_* variables described in scripts/scp-common.sh.
+# error. Settings are the FH_* variables described in scripts/scp-common.sh. Two of them are required, because the
+# account ids are not stored in this repository: export FH_MGMT_ACCOUNT_ID and FH_SCP_TARGET_ID (12 digits each) first.
 
 set -euo pipefail
 
@@ -27,6 +28,7 @@ for arg in "${FH_REST[@]+"${FH_REST[@]}"}"; do
   esac
 done
 
+fh_require_config
 fh_require_aws
 fh_check_management_account
 

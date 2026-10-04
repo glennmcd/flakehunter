@@ -11,7 +11,8 @@
 # ignored), and an attachment that already exists is left alone. When there is nothing to change it says so and stops.
 # It also stops without changing anything if the profile is not the management account or the account already has the
 # maximum 5 SCPs attached. Undo with scripts/scp-rollback-guardrails.sh. Settings (profile, ids, file) are the FH_*
-# variables described in scripts/scp-common.sh.
+# variables described in scripts/scp-common.sh. Two of them are required, because the account ids are not stored in
+# this repository: export FH_MGMT_ACCOUNT_ID and FH_SCP_TARGET_ID (12 digits each) first.
 
 set -euo pipefail
 
@@ -22,6 +23,7 @@ FH_SCRIPT=scp-apply
 fh_parse_flags "$@"
 [ "${#FH_REST[@]}" -eq 0 ] || fh_die "unknown argument: ${FH_REST[0]} (usage: scp-apply-guardrails.sh [--dry-run] [--yes])"
 
+fh_require_config
 [ -f "$FH_SCP_FILE" ] || fh_die "policy file not found: $FH_SCP_FILE"
 fh_require_aws
 fh_check_management_account

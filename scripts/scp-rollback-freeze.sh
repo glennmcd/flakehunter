@@ -14,7 +14,8 @@
 # Do this only after fixing whatever caused the spend, or raise monthlyBudgetUsd and redeploy, because the budget will
 # stop the API again as soon as it is still over its limit. Every check in both accounts runs before anything changes.
 # Only a reserved concurrency of exactly 0 is removed: a larger number is a cap you set with `-c reservedConcurrency=N`
-# and stays. Safe to run again. Settings are the FH_* variables described in scripts/scp-common.sh, plus
+# and stays. Safe to run again. Export FH_MGMT_ACCOUNT_ID and FH_SCP_TARGET_ID (12 digits each) first: the account ids
+# are not stored in this repository. Settings are the FH_* variables described in scripts/scp-common.sh, plus
 # FH_FREEZE_SCP_NAME (default FlakeHunterBudgetFreeze).
 
 set -euo pipefail
@@ -36,6 +37,7 @@ for arg in "${FH_REST[@]+"${FH_REST[@]}"}"; do
 done
 [ "$do_scp" = 1 ] || [ "$do_concurrency" = 1 ] || fh_die "--scp-only and --concurrency-only cannot be used together"
 
+fh_require_config
 fh_require_aws
 
 detach=0

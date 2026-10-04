@@ -53,9 +53,13 @@ function setup() {
   chmodSync(file, 0o755);
   const bin = dir.replaceAll("\\", "/");
 
-  const run = (script: string, args: string[], env: Record<string, string> = {}) => {
+  // A null value removes a variable, to test a script that is run without it.
+  const run = (script: string, args: string[], env: Record<string, string | null> = {}) => {
     const PATH = `${bin}${path.delimiter === ";" ? ":" : path.delimiter}${process.env.PATH ?? ""}`;
+    // The scripts require these two account ids from the environment; they have no defaults.
     const defaults = {
+      FH_MGMT_ACCOUNT_ID: "111111111111",
+      FH_SCP_TARGET_ID: "222222222222",
       FAKE_ACCOUNT: "111111111111",
       FAKE_APP_ACCOUNT: "222222222222",
       FAKE_POLICY_ID: "None",
@@ -64,7 +68,11 @@ function setup() {
       FAKE_FUNCTION: "api-fn-123",
       FAKE_CONCURRENCY: "None",
     };
-    const result = Bun.spawnSync(["bash", script, ...args], { env: { PATH, FAKE_LOG: log, ...defaults, ...env } });
+    const merged: Record<string, string | null> = { PATH, FAKE_LOG: log, ...defaults, ...env };
+    const spawnEnv = Object.fromEntries(
+      Object.entries(merged).filter((entry): entry is [string, string] => entry[1] !== null),
+    );
+    const result = Bun.spawnSync(["bash", script, ...args], { env: spawnEnv });
     let calls: string[] = [];
     try {
       calls = readFileSync(log, "utf8").split("\n").filter(Boolean);
@@ -493,5 +501,77 @@ describe("scp-rollback-freeze.sh", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("--yes");
     expect(result.changes).toEqual([]);
+  });
+});
+
+describe("required account ids", () => {
+  const scripts = [
+    ["scp-apply-guardrails.sh", apply, ["--yes"]],
+    ["scp-rollback-guardrails.sh", rollback, ["--yes"]],
+    ["scp-rollback-freeze.sh", freezeRollback, ["--yes"]],
+  ] as const;
+
+  for (const [name, script, args] of scripts) {
+    it(`${name} stops, naming the variable, before calling AWS when FH_MGMT_ACCOUNT_ID is not set`, () => {
+      const { run } = setup();
+      const result = run(script, [...args], { FH_MGMT_ACCOUNT_ID: null });
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("FH_MGMT_ACCOUNT_ID is not set");
+      expect(result.calls).toEqual([]);
+    });
+
+    it(`${name} stops, naming the variable, before calling AWS when FH_SCP_TARGET_ID is not set`, () => {
+      const { run } = setup();
+      const result = run(script, [...args], { FH_SCP_TARGET_ID: null });
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("FH_SCP_TARGET_ID is not set");
+      expect(result.calls).toEqual([]);
+    });
+
+    it(`${name} rejects an id that is not exactly 12 digits`, () => {
+      const { run } = setup();
+      for (const bad of ["12345678901", "1234567890123", "12345678901a", "<management-account-id>"]) {
+        const result = run(script, [...args], { FH_MGMT_ACCOUNT_ID: bad });
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("FH_MGMT_ACCOUNT_ID must be exactly 12 digits");
+        expect(result.calls).toEqual([]);
+      }
+      const target = run(script, [...args], { FH_SCP_TARGET_ID: "not-an-id" });
+      expect(target.stderr).toContain("FH_SCP_TARGET_ID must be exactly 12 digits");
+      expect(target.calls).toEqual([]);
+    });
+  }
+
+  it("the freeze rollback checks the flakehunter account against FH_SCP_TARGET_ID unless FH_APP_ACCOUNT_ID is set", () => {
+    const { run } = setup();
+    const frozen = { FAKE_POLICY_ID: "p-freeze", FAKE_ATTACHED: "p-freeze", FAKE_CONCURRENCY: "0" };
+
+    // The default is the target account, so a profile in a different account is refused...
+    const wrong = run(freezeRollback, ["--yes"], { ...frozen, FAKE_APP_ACCOUNT: "333333333333" });
+    expect(wrong.status).toBe(1);
+    expect(wrong.stderr).toContain("not the flakehunter account 222222222222");
+    expect(wrong.changes).toEqual([]);
+
+    // ...and FH_APP_ACCOUNT_ID overrides it.
+    const overridden = run(freezeRollback, ["--yes"], {
+      ...frozen,
+      FAKE_APP_ACCOUNT: "333333333333",
+      FH_APP_ACCOUNT_ID: "333333333333",
+    });
+    expect(overridden.status).toBe(0);
+    expect(overridden.changes).toHaveLength(2);
+  });
+
+  it("the account ids are not stored in the scripts themselves", () => {
+    for (const file of [
+      "scp-common.sh",
+      "scp-apply-guardrails.sh",
+      "scp-rollback-guardrails.sh",
+      "scp-rollback-freeze.sh",
+    ]) {
+      expect(readFileSync(path.join(import.meta.dir, file), "utf8")).not.toMatch(/\b\d{12}\b/);
+    }
   });
 });

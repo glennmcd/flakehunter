@@ -1,27 +1,29 @@
 # Shared by scp-apply-guardrails.sh and scp-rollback-guardrails.sh. Sourced, never run on its own.
 #
 # Everything here talks to AWS Organizations, so it must run with credentials for the MANAGEMENT account (SCPs can only
-# be created and attached there). Override the defaults with environment variables:
+# be created and attached there).
+#
+# Two AWS account ids are REQUIRED. They are not stored in this repository; export them before running a script:
+#   export FH_MGMT_ACCOUNT_ID=<management-account-id>    the management account, checked before anything changes
+#   export FH_SCP_TARGET_ID=<flakehunter-account-id>     the account the policy is attached to
+# Each must be 12 digits. A script stops with a message naming the variable if one is missing or malformed.
+#
+# Everything else has a default that an environment variable overrides:
 #   FH_MGMT_PROFILE     AWS CLI profile of the management account   (default: flakehunter-mgmt)
 #   FH_MGMT_REGION      Region to pass to the CLI; unset uses the profile's own (Organizations is global, us-east-1)
-#   FH_MGMT_ACCOUNT_ID  the management account id, checked before anything changes   (default: 111111111111)
-#   FH_SCP_TARGET_ID    the account the policy is attached to      (default: 222222222222, the flakehunter account)
 #   FH_SCP_NAME         the policy's name                          (default: FlakeHunterGuardrails)
 #   FH_SCP_FILE         the policy document            (default: infra/scp/flakehunter-guardrails.json in this repo)
 
 FH_MGMT_PROFILE=${FH_MGMT_PROFILE:-flakehunter-mgmt}
-FH_MGMT_ACCOUNT_ID=${FH_MGMT_ACCOUNT_ID:-111111111111}
-FH_SCP_TARGET_ID=${FH_SCP_TARGET_ID:-222222222222}
 FH_SCP_NAME=${FH_SCP_NAME:-FlakeHunterGuardrails}
 FH_SCP_FILE=${FH_SCP_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/infra/scp/flakehunter-guardrails.json}
 # Only scp-rollback-freeze.sh also touches the flakehunter account itself (the API function's concurrency):
 #   FH_APP_PROFILE      AWS CLI profile of the flakehunter account  (default: flakehunter)
 #   FH_APP_REGION       Region of the stack                         (default: us-east-2)
-#   FH_APP_ACCOUNT_ID   the flakehunter account id, checked first   (default: 222222222222)
+#   FH_APP_ACCOUNT_ID   the flakehunter account id, checked first   (default: FH_SCP_TARGET_ID, the same account)
 #   FH_STACK_NAME       the API stack whose FunctionName output names the function (default: FlakeHunterApi)
 FH_APP_PROFILE=${FH_APP_PROFILE:-flakehunter}
 FH_APP_REGION=${FH_APP_REGION:-us-east-2}
-FH_APP_ACCOUNT_ID=${FH_APP_ACCOUNT_ID:-222222222222}
 FH_STACK_NAME=${FH_STACK_NAME:-FlakeHunterApi}
 FH_SCP_LIMIT=5 # AWS allows at most 5 SCPs attached directly to one account
 FH_ASSUME_YES=0
@@ -30,6 +32,21 @@ FH_DRY_RUN=0
 fh_die() {
   echo "$FH_SCRIPT: $*" >&2
   exit 1
+}
+
+# Stops unless the account ids are given, as 12 digits. They come from the environment, never from this repository.
+# Call it before anything talks to AWS. FH_APP_ACCOUNT_ID, the flakehunter account, defaults to FH_SCP_TARGET_ID.
+fh_require_config() {
+  [ -n "${FH_MGMT_ACCOUNT_ID:-}" ] ||
+    fh_die "FH_MGMT_ACCOUNT_ID is not set. Set it to the management account's id: export FH_MGMT_ACCOUNT_ID=<12-digit account id>"
+  [ -n "${FH_SCP_TARGET_ID:-}" ] ||
+    fh_die "FH_SCP_TARGET_ID is not set. Set it to the flakehunter account's id: export FH_SCP_TARGET_ID=<12-digit account id>"
+  FH_APP_ACCOUNT_ID=${FH_APP_ACCOUNT_ID:-$FH_SCP_TARGET_ID}
+
+  local name
+  for name in FH_MGMT_ACCOUNT_ID FH_SCP_TARGET_ID FH_APP_ACCOUNT_ID; do
+    [[ ${!name} =~ ^[0-9]{12}$ ]] || fh_die "$name must be exactly 12 digits"
+  done
 }
 
 # The aws CLI against the management account. `tr` drops the carriage returns a Windows aws.exe adds to its output.
