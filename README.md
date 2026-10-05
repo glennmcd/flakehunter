@@ -3,7 +3,7 @@
 **Find the flaky tests in your GitHub Actions CI: any test that both passes and fails on the same commit.**
 
 <!-- TODO: replace <demo-url> with the dashboard's SiteUrl output or custom domain -->
-**[Live demo](<demo-url>)** (password protected; [open an issue](https://github.com/glennmcd/flakehunter/issues) to
+**[Live demo](https://main.dcr99cldvce5a.amplifyapp.com/)** (password protected; [open an issue](https://github.com/glennmcd/flakehunter/issues) to
 ask for access)
 
 ![The FlakeHunter dashboard: a repo's flakiest tests, then one test's pass/fail history](docs/media/dashboard.gif)
@@ -99,6 +99,15 @@ A TypeScript monorepo built with Bun:
 - **Database:** Postgres (Neon for dev and production, in-memory PGlite for tests, so tests need no database or
   network)
 - **Infrastructure:** AWS CDK (`infra/`)
+
+## Security
+
+Security best practices were used including but not limited to:
+
+- Authorization required at all levels and external hooks  
+- No secrets in code
+- Data is schema validated and size limited
+- AWS deployment specifies rate limiters, explicit SCP, kill switch, cost protection
 
 ## Get started
 
