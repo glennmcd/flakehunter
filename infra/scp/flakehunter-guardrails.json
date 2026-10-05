@@ -18,7 +18,8 @@
         "health:*",
         "sso:*",
         "identitystore:*",
-        "signin:*"
+        "signin:*",
+        "route53:*"
       ],
       "Resource": "*",
       "Condition": {
@@ -50,6 +51,8 @@
         "budgets:*",
         "amplify:*",
         "secretsmanager:*",
+        "route53:*",
+        "acm:*",
         "cloudwatch:*",
         "ce:*",
         "organizations:Describe*",

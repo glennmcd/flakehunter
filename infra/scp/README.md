@@ -34,14 +34,29 @@ the ids. The scripts check them against the profile before they change anything,
 
 | Statement | Effect |
 | --- | --- |
-| `DenyOutsideUsEast2` | Everything outside us-east-2 is denied, except global services (IAM, STS, Budgets, billing, SSO and similar). |
-| `DenyServicesFlakeHunterDoesNotUse` | Only the services the CDK stacks use (plus CDK bootstrap and billing) are allowed. Anything else, such as EC2 or RDS, is denied. |
+| `DenyOutsideUsEast2` | Everything outside us-east-2 is denied, except global services (IAM, STS, Budgets, billing, SSO, Route 53 and similar). Route 53 is global, so AWS evaluates its calls as `us-east-1`; without the exemption every DNS call would be denied. |
+| `DenyServicesFlakeHunterDoesNotUse` | Only the services the CDK stacks use (plus CDK bootstrap, billing, and Route 53 and ACM for a custom domain) are allowed. Anything else, such as EC2 or RDS, is denied. |
 | `DenyMultiRegionAndEdgeFeatures` | No Lambda@Edge replication, StackSets, DynamoDB global tables, S3 replication or multi-Region KMS keys. |
 | `DenyLongLivedIamCredentials` | No IAM users, access keys or login profiles. |
 | `ProtectBudgetKillSwitch` | Only the CDK's CloudFormation execution role may modify or delete the budget, the stop function or its topic. |
 
 The service allow-list is strict on purpose. **When you add a service to the CDK, add it to the second statement
 first**, or the deploy fails with an explicit deny in the CloudFormation execution role.
+
+**Custom domain.** `route53:*` and `acm:*` are allowed so a domain can be pointed at the stack:
+- *API (API Gateway):* a Regional custom domain needs an ACM certificate in the same Region as the API, which is
+  us-east-2. ACM therefore stays pinned to us-east-2 and is not exempted from the Region lock. Then an alias record in
+  Route 53 points the domain at the API.
+- *Dashboard (Amplify):* Amplify provisions its own certificate and CloudFront distribution as a service, so your
+  principals need only Route 53 for the DNS records.
+
+Two things are deliberately **not** allowed. Registering a domain through AWS needs `route53domains:*` (a global service
+that bills you for the registration): add it to both statements if you register here, or buy the domain elsewhere and
+point its name servers at a Route 53 hosted zone. And a certificate in us-east-1, which CloudFront-based setups of your
+own would need, is denied; it would need `acm:*` added to the first statement too.
+
+Apply the change with `bash scripts/scp-apply-guardrails.sh --dry-run`, then without `--dry-run`. It sees the file now
+differs from the attached policy and updates it in place. It takes effect on the account within a few minutes.
 
 The admin role (`AccountFullAccessRole`) is bound by the Region and service rules, which is the point. If you lock
 yourself out of something, fix it from the management account (detach the policy below).
