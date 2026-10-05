@@ -5,9 +5,13 @@
 **[Live demo](https://main.dcr99cldvce5a.amplifyapp.com/)** (password protected; [open an issue](https://github.com/glennmcd/flakehunter/issues) to
 ask for access)
 
+**The dashboard:** a repo's flakiest tests, then one test's pass/fail history.
+
 ![The FlakeHunter dashboard: a repo's flakiest tests, then one test's pass/fail history](docs/media/dashboard.gif)
 
-![The FlakeHunter MCP Server: ask your AI Agent about your flaky tests](docs/media/mcp.gif)
+**The MCP server:** ask your AI agent about your flaky tests.
+
+![The FlakeHunter MCP server: ask your AI agent about your flaky tests](docs/media/mcp.gif)
 
 ## How it works
 
