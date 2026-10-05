@@ -1,4 +1,156 @@
-# Deploying FlakeHunter to AWS
+# Setting up and deploying FlakeHunter
+
+Part 1 runs FlakeHunter on your machine against a hosted Postgres database. Part 2 deploys it to AWS. For the CI upload
+snippet and the endpoint reference, see [api.md](api.md).
+
+- [Part 1: Run it locally](#part-1-run-it-locally)
+- [Part 2: Deploy to AWS](#part-2-deploy-to-aws)
+- [Deploying from a new clone or repository](#deploying-from-a-new-clone-or-repository)
+- [Day-two operations](#day-two-operations), [What it costs](#what-it-costs),
+  [Stopping a flood](#stopping-a-flood), [Troubleshooting](#troubleshooting)
+
+# Part 1: Run it locally
+
+## Install and configure the API
+
+1. Install dependencies:
+   ```bash
+   bun install
+   ```
+2. Create `apps/api/.env` (copy `.env.example`) with:
+   - `DATABASE_URL`: a Postgres connection string (Neon's free tier works well; no local Postgres needed)
+   - `API_TOKEN`: any string; this is the bearer token the dashboard and API clients must send
+   - `GITHUB_WEBHOOK_SECRET`: any string; must match the secret configured on the GitHub webhook
+   - `GITHUB_PAT`: a classic GitHub PAT with `repo` + `workflow` scopes, used to list and download workflow run
+     artifacts
+3. Run migrations:
+   ```bash
+   bun run db:migrate
+   ```
+4. Start the API on <http://localhost:3000>:
+   ```bash
+   bun run dev:api
+   ```
+
+## Run the dashboard (`apps/web`)
+
+A Next.js app (App Router) that reads from the API server-side, so the API token never reaches the
+browser. Pages: `/` (repository list; goes straight to the repo when there is only one, `/?list=1` always lists),
+`/repos/<id>` (summary and flakiest tests, with 7/30/90-day window, minimum-commits filter and paging) and
+`/repos/<id>/tests/<id>` (result timeline and history for one test).
+
+1. Copy `apps/web/.env.example` to `apps/web/.env.local` and set:
+   - `API_BASE_URL`: where the API runs (default `http://localhost:3000`)
+   - `API_TOKEN`: the API's read token (the same value as `API_TOKEN` in `apps/api/.env`)
+   - `SITE_PASSWORD`: password for the site-wide gate; leave empty to disable it locally
+2. With the API running, start it:
+   ```bash
+   bun run dev:web
+   ```
+   It serves on <http://localhost:3001> (the API uses 3000).
+
+**Site password.** When `SITE_PASSWORD` is set, every page and asset is behind HTTP Basic auth: the
+browser prompts once, and you can enter any username with the password. When it is unset the site
+is open in development, but a production build **refuses to serve (503)** rather than going public
+by accident. Basic auth sends the password with every request, so only expose the site over HTTPS
+(Amplify Hosting does this for you).
+
+`bun run build:web` makes a production build (CI runs it).
+
+## Register a repo
+
+FlakeHunter needs a `repos` row before it will ingest anything from a given GitHub repo. Seed one
+with:
+
+```bash
+SEED_REPO_OWNER=<owner> SEED_REPO_NAME=<repo> SEED_REPO_GITHUB_ID=<github numeric repo id> \
+  bun run --env-file=apps/api/.env scripts/seed-dev-repo.ts
+```
+
+Get the numeric GitHub repo id with `gh api repos/<owner>/<repo> --jq '.id'`. To upload reports from CI you also need
+an upload token for the repo; see [api.md](api.md#uploading-reports-from-ci).
+
+## Demo data
+
+To demo FlakeHunter without wiring up a real repo, generate a fake CI history and upload it through
+the real `POST /api/reports` endpoint. The data is a made-up storefront service with 47 tests: most
+always pass, six are flaky (one only in the last week, one that stopped three weeks ago, two with
+in-suite retries), one was broken until 12 days ago, and two are skipped. Failed runs are usually
+re-run on the same commit, which is what makes flaky tests show up. Runs are spread over the last 30
+days using `X-FH-Timestamp`, so history, `since` filters and trends have something to show.
+
+1. Register the demo repo and mint its upload token (once):
+
+   ```bash
+   SEED_REPO_OWNER=flakehunter-demo SEED_REPO_NAME=storefront SEED_REPO_GITHUB_ID=900000001 \
+     bun run --env-file=apps/api/.env scripts/seed-dev-repo.ts
+   TOKEN_REPO_FULL_NAME=flakehunter-demo/storefront \
+     bun run --env-file=apps/api/.env scripts/create-repo-token.ts
+   ```
+
+2. Seed it (the API must be running):
+
+   ```bash
+   DEMO_UPLOAD_TOKEN=<token from above> bun run seed:demo
+   ```
+
+   `DEMO_API_URL` points it at another API (default `http://localhost:3000`), `DEMO_DAYS` sets how
+   far back to go (0 to 365, default 30), and `DEMO_SEED` changes the history (default 42).
+   `bun run seed:demo --dry-run` generates and counts without uploading.
+
+Seeding is safe to repeat: for a seed the runs are deterministic, so a second run reports every
+upload as already present. About 130 uploads are sent, one at a time, and a `429` is waited out and
+retried. The dashboard then shows the demo repo at <http://localhost:3001>.
+
+## Point GitHub at FlakeHunter (webhook)
+
+The API needs to be reachable from GitHub's servers. Locally, use a
+[`cloudflared`](https://github.com/cloudflare/cloudflared) quick tunnel (no account needed):
+
+```bash
+bun run tunnel
+```
+
+This runs `cloudflared tunnel --url http://localhost:3000`, passes its output through, and writes the
+full webhook URL (`<tunnel URL>/webhooks/github`) to `scripts/webhook-url.txt` (git-ignored,
+overwritten each run). Pass another target if needed: `bun run tunnel http://localhost:4000`. The
+hostname changes on every start, so the file is only valid for the tunnel that wrote it.
+
+On the target repo: **Settings → Webhooks → Add webhook**
+- Payload URL: the contents of `scripts/webhook-url.txt`
+- Content type: `application/json`
+- Secret: same value as `GITHUB_WEBHOOK_SECRET`
+- Events: select **Workflow runs** only
+
+Once registered, any `workflow_run` `completed` event triggers FlakeHunter to fetch the run's
+JUnit XML artifact (assumes a single artifact per run, zipped, containing `.xml` files), parse
+it, and store results. Only runs of the repo's own code are ingested: runs from forks are skipped,
+and so are runs started by triggers other than `push`, `pull_request`, `merge_group`, `schedule`
+and `workflow_dispatch` (for example `pull_request_target`, which is often used to run fork code),
+because whoever writes a run's code controls its artifact. An artifact over 10 MB zipped, or whose XML files
+decompress to more than 11 MB together, is refused; the reason is recorded in
+`webhook_events.processing_error`.
+
+## MCP server
+
+`packages/mcp-server` lets an AI assistant ask FlakeHunter which tests are flaky and how a test has failed. With the
+API running, start it over stdio:
+
+```bash
+API_BASE_URL=http://localhost:3000 API_TOKEN=<token> bun run --cwd packages/mcp-server start
+```
+
+Configuration and registering it in Claude Code are in
+[packages/mcp-server/README.md](../packages/mcp-server/README.md).
+
+## Scope limits
+
+- One JUnit XML artifact per run is assumed (no multi-artifact merge), and only `workflow_run` `completed` events are
+  handled.
+- Reads use a single static bearer token; upload tokens are per repo. There are no user accounts or OAuth.
+- `flaky_tests` is a live SQL view, not a materialized table.
+
+# Part 2: Deploy to AWS
 
 The API runs on AWS Lambda behind an API Gateway HTTP API, the dashboard on AWS Amplify Hosting, and the database
 stays on Neon. Everything lives in one AWS Region, **us-east-2** (your project's Region). The infrastructure is the
