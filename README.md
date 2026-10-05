@@ -22,44 +22,39 @@ ask for access)
 ### Deployed on AWS
 
 ```mermaid
-flowchart LR
-  subgraph GitHub
-    GA["GitHub Actions run"]
-    GHAPI["GitHub API<br/>(run artifacts)"]
-  end
-
+flowchart BT
   subgraph AWS["AWS (us-east-2)"]
-    APIGW["API Gateway<br/>HTTP API"]
     L["Lambda<br/>Fastify API"]
+    APIGW["API Gateway<br/>HTTP API"]
     DDB[("DynamoDB<br/>rate limits")]
     SSM["SSM<br/>Parameter Store"]
     AMP["Amplify Hosting<br/>Next.js dashboard"]
+  end
+
+  subgraph GitHub
+    GA["GitHub Actions run"]
+    GHAPI["GitHub API<br/>(run artifacts)"]
   end
 
   DB[("Neon<br/>Postgres")]
   U(["You, in a browser"])
   AI(["AI assistant<br/>via MCP server"])
 
-  GA -- "workflow_run webhook<br/>or POST /api/reports" --> APIGW
+  GA -- "workflow_run webhook<br/>or POST /api/reports" ---> APIGW
+  GHAPI -- "artifact download" --> L
   APIGW --> L
-  L -- "download artifact" --> GHAPI
-  L --> DB
-  L --> DDB
-  L -. "secrets at cold start" .-> SSM
+  SSM -. "secrets at cold start" .-> L
+  DDB <--> L
+  L <--> DB
   U --> AMP
   AMP -- "server-side, bearer token" --> APIGW
-  AI --> APIGW
+  AI ---> APIGW
 ```
 
 ### Running locally
 
 ```mermaid
-flowchart LR
-  subgraph GitHub
-    GA["GitHub Actions run"]
-    GHAPI["GitHub API<br/>(run artifacts)"]
-  end
-
+flowchart BT
   subgraph Machine["Your machine"]
     T["cloudflared tunnel<br/>bun run tunnel"]
     API["Fastify API :3000<br/>bun run dev:api<br/>(in-memory rate limits)"]
@@ -69,16 +64,21 @@ flowchart LR
     MCP["MCP server (stdio)"]
   end
 
+  subgraph GitHub
+    GA["GitHub Actions run"]
+    GHAPI["GitHub API<br/>(run artifacts)"]
+  end
+
   DB[("Neon<br/>Postgres")]
   U(["You, in a browser"])
   AI(["AI assistant"])
 
   GA -- "workflow_run webhook<br/>or POST /api/reports" --> T
+  GHAPI -- "artifact download" --> API
   T --> API
   SEED -- "POST /api/reports" --> API
-  API -- "download artifact" --> GHAPI
-  API --> DB
-  API -. "read at start" .-> ENV
+  ENV -. "read at start" .-> API
+  API <--> DB
   U --> WEB
   WEB -- "server-side, bearer token" --> API
   AI --> MCP
@@ -86,7 +86,7 @@ flowchart LR
 ```
 
 Locally, a quick tunnel gives GitHub a public URL for the API, so no cloud resources are involved apart from the Neon
-database. Tests need none of this: they run against in-memory PGlite.
+database. FlakeHunter's own unit tests need none of this: they run against in-memory PGlite.
 
 ## Stack
 
