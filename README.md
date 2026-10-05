@@ -2,11 +2,12 @@
 
 **Find the flaky tests in your GitHub Actions CI: any test that both passes and fails on the same commit.**
 
-<!-- TODO: replace <demo-url> with the dashboard's SiteUrl output or custom domain -->
 **[Live demo](https://main.dcr99cldvce5a.amplifyapp.com/)** (password protected; [open an issue](https://github.com/glennmcd/flakehunter/issues) to
 ask for access)
 
 ![The FlakeHunter dashboard: a repo's flakiest tests, then one test's pass/fail history](docs/media/dashboard.gif)
+
+![The FlakeHunter MCP Server: ask your AI Agent about your flaky tests](docs/media/mcp.gif)
 
 ## How it works
 

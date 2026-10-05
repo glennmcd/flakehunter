@@ -1,13 +1,58 @@
 # Setting up and deploying FlakeHunter
 
-Part 1 runs FlakeHunter on your machine against a hosted Postgres database. Part 2 deploys it to AWS. For the CI upload
-snippet and the endpoint reference, see [api.md](api.md).
+Both parts use the same hosted Postgres database, so start with "Create the database". Part 1 runs FlakeHunter on
+your machine; Part 2 deploys it to AWS. For the CI upload snippet and the endpoint reference, see [api.md](api.md).
 
+**Every command in this document is a bash command, run from the repository root.** On Windows, use Git Bash, not
+PowerShell or Command Prompt: forms such as `NAME=value bun run ...` (setting a variable for one command), `export`
+and `\` line continuations are bash syntax and fail in those shells. macOS and Linux terminals run bash or zsh, which
+both work.
+
+- [Create the database (Neon)](#create-the-database-neon)
 - [Part 1: Run it locally](#part-1-run-it-locally)
 - [Part 2: Deploy to AWS](#part-2-deploy-to-aws)
 - [Deploying from a new clone or repository](#deploying-from-a-new-clone-or-repository)
 - [Day-two operations](#day-two-operations), [What it costs](#what-it-costs),
   [Stopping a flood](#stopping-a-flood), [Troubleshooting](#troubleshooting)
+
+# Create the database (Neon)
+
+FlakeHunter uses a hosted Postgres database on [Neon](https://neon.com); you don't need a local Postgres server.
+The free plan is enough.
+
+1. **Create a project.** Sign up at <https://console.neon.tech> and create a project. Choose **AWS** as the cloud and
+   **US East (Ohio)**, `us-east-2`, as the region, so the database sits next to the Lambda when you deploy to AWS.
+   Any Postgres version Neon offers works. The project starts with one database (`neondb`) on one default branch,
+   named `production` when the project is created in the console (`main` when created with the CLI or API).
+2. **Create the branches.** Local development uses the default branch. The AWS demo gets its own branch (Part 2,
+   step 1), so the public demo's data and tokens stay apart from your development data and can be reset on their
+   own. A new branch starts as a copy of its parent's data, so create these now, while the project is still empty,
+   even if you deploy to AWS later:
+   - `demo-base`, from the default branch. It stays empty and is never used: it is the clean point the demo resets
+     to (resetting a branch copies its parent's current data).
+   - `demo`, from `demo-base`: the public demo's database.
+
+   For each, open **Branches**, click **New branch**, choose the parent, keep **Current data**, and **untick
+   "Automatically delete branch after"**. It is ticked by default with 1 day, and would delete the branch the next
+   day.
+3. **Copy the connection strings.** On the project dashboard, click **Connect** and select the branch. The
+   **Connection pooling** toggle chooses which string the dialog shows; it is on by default.
+
+   | String | Pooling | Looks like | Used for |
+   | --- | --- | --- | --- |
+   | Direct | off | host `ep-...us-east-2.aws.neon.tech` | the local API, migrations and the setup scripts |
+   | Pooled | on | host `ep-...-pooler.us-east-2.aws.neon.tech` | the Lambda only (Part 2) |
+
+   Migrations need the direct string, and one local process does not need pooling. On Lambda, many short-lived
+   instances each open a connection, which is what Neon's pooler is for; the API detects the `-pooler` host and
+   turns off prepared statements for it.
+4. **Remove `&channel_binding=require`** from the end of each string and keep `?sslmode=require`. The Postgres driver
+   FlakeHunter uses (postgres.js) does not support channel binding and would send the option to the server as an
+   unknown setting; the connection is still encrypted with `sslmode=require`.
+
+Treat each connection string like a password: it contains the database password. Keep it in `apps/api/.env` (git
+ignores it) or in the AWS parameter store, and never commit it. If one leaks, reset the role's password in the Neon
+console (**Roles**).
 
 # Part 1: Run it locally
 
@@ -17,8 +62,8 @@ snippet and the endpoint reference, see [api.md](api.md).
    ```bash
    bun install
    ```
-2. Create `apps/api/.env` (copy `.env.example`) with:
-   - `DATABASE_URL`: a Postgres connection string (Neon's free tier works well; no local Postgres needed)
+2. Copy the `.env.example` at the repo root to `apps/api/.env` and set:
+   - `DATABASE_URL`: the **direct** connection string for the default branch, from "Create the database" above
    - `API_TOKEN`: any string; this is the bearer token the dashboard and API clients must send
    - `GITHUB_WEBHOOK_SECRET`: any string; must match the secret configured on the GitHub webhook
    - `GITHUB_PAT`: a classic GitHub PAT with `repo` + `workflow` scopes, used to list and download workflow run
@@ -57,19 +102,6 @@ by accident. Basic auth sends the password with every request, so only expose th
 
 `bun run build:web` makes a production build (CI runs it).
 
-## Register a repo
-
-FlakeHunter needs a `repos` row before it will ingest anything from a given GitHub repo. Seed one
-with:
-
-```bash
-SEED_REPO_OWNER=<owner> SEED_REPO_NAME=<repo> SEED_REPO_GITHUB_ID=<github numeric repo id> \
-  bun run --env-file=apps/api/.env scripts/seed-dev-repo.ts
-```
-
-Get the numeric GitHub repo id with `gh api repos/<owner>/<repo> --jq '.id'`. To upload reports from CI you also need
-an upload token for the repo; see [api.md](api.md#uploading-reports-from-ci).
-
 ## Demo data
 
 To demo FlakeHunter without wiring up a real repo, generate a fake CI history and upload it through
@@ -101,6 +133,19 @@ days using `X-FH-Timestamp`, so history, `since` filters and trends have somethi
 Seeding is safe to repeat: for a seed the runs are deterministic, so a second run reports every
 upload as already present. About 130 uploads are sent, one at a time, and a `429` is waited out and
 retried. The dashboard then shows the demo repo at <http://localhost:3001>.
+
+## Register a repo
+
+FlakeHunter needs a `repos` row before it will ingest anything from a given GitHub repo. Seed one
+with:
+
+```bash
+SEED_REPO_OWNER=<owner> SEED_REPO_NAME=<repo> SEED_REPO_GITHUB_ID=<github numeric repo id> \
+  bun run --env-file=apps/api/.env scripts/seed-dev-repo.ts
+```
+
+Get the numeric GitHub repo id with `gh api repos/<owner>/<repo> --jq '.id'`. To upload reports from CI you also need
+an upload token for the repo; see [api.md](api.md#uploading-reports-from-ci).
 
 ## Point GitHub at FlakeHunter (webhook)
 
@@ -166,7 +211,7 @@ curl / CI ──▶ API Gateway HTTP API ──▶ Lambda (Fastify) ──▶ Ne
                                           └─ DynamoDB (upload rate-limit counters)
 ```
 
-Commands assume Git Bash from the repository root. Nothing here is run for you: deploying changes your AWS project
+Commands are bash, run from the repository root (see the note at the top). Nothing here is run for you: deploying changes your AWS project
 and costs money, so each step is yours to run and check.
 
 Steps 0 to 8 build everything from nothing. If the stacks already exist and you are deploying from a new clone or a new
@@ -195,18 +240,13 @@ GitHub repository, go to "Deploying from a new clone or repository" after step 8
 
 ## 1. Demo database (Neon)
 
-Use a separate Neon branch for the public demo, in Neon's **AWS us-east-2** region so it sits next to the Lambda.
-In the Neon console create the branch and copy two connection strings from its Connect dialog:
+Follow "Create the database" at the top of this document, if you haven't already, and use the `demo` branch
+for the public demo (its step 2). Copy **both** connection strings for that branch (its step 3): the direct one for
+migrations and the setup scripts below, the pooled one for the Lambda's `DATABASE_URL` parameter (step 3). On Lambda
+the API also keeps one connection per execution environment, so many concurrent invocations do not exhaust Neon's
+connection limit.
 
-| Name | Looks like | Used for |
-| --- | --- | --- |
-| Direct | host `ep-...us-east-2.aws.neon.tech` | migrations and the one-off setup scripts |
-| Pooled | host `ep-...-pooler.us-east-2.aws.neon.tech` | the Lambda (`DATABASE_URL` parameter below) |
-
-The API detects the `-pooler` host and turns off prepared statements, and on Lambda it keeps one connection per
-execution environment, so many concurrent invocations do not exhaust Neon's connection limit.
-
-Export the direct one for this shell session (never commit it):
+Export both for this shell session (never commit them):
 
 ```bash
 export DIRECT_DATABASE_URL='postgres://...'
@@ -533,7 +573,8 @@ DATABASE_URL="$DIRECT_DATABASE_URL" REVOKE_TOKEN='<old token>' bun run scripts/r
 back by itself. For the dashboard, redeploy an earlier build from the Amplify console. Database migrations do not roll
 back; write a new migration instead.
 
-**Reset the demo.** Reset the Neon branch to its parent in the Neon console, run steps 2 and 7 again (the old upload
+**Reset the demo.** In the Neon console, reset the `demo` branch to its parent, `demo-base` (empty; never reset to
+the default branch, which would copy your development data into the public demo), then run steps 2 and 7 again (the old upload
 token is gone with the data, so mint a new one and update `DEMO_UPLOAD_TOKEN`).
 
 **Tear down.** `bun run --cwd infra cdk destroy FlakeHunterWeb FlakeHunterApi --profile flakehunter`, then delete what

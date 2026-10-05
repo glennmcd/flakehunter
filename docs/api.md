@@ -3,6 +3,8 @@
 How CI sends test reports to FlakeHunter, and the read endpoints the dashboard and the MCP server use. To run the API
 itself, see [deployment.md](deployment.md).
 
+The commands below are bash commands, run from the repository root (on Windows, use Git Bash).
+
 ## Uploading reports from CI
 
 Instead of (or as well as) the webhook, CI can push a JUnit XML report straight to
