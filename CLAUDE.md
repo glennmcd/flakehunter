@@ -193,7 +193,7 @@ A CDK app (TypeScript) with two stacks in us-east-2: `FlakeHunterApi` (Lambda, A
 - Read auth is a single static token; upload tokens are per repo but have no management endpoint (mint with `scripts/create-repo-token.ts`, revoke with `scripts/revoke-repo-token.ts`). There is no OAuth.
 - Upload rate limiting exists (per IP and per token); reads are limited only by API Gateway throttling. There is no OpenAPI document for `/api`. The week-1 routes (`/repos`, `/flaky`, `/runs`, `/tests`) no longer have a caller since the old Vite dashboard was removed (`apps/web` uses the v1 API); removing them is a follow-up.
 - Webhook processing still runs inside the request (artifact download and unzip). That suits small demo artifacts; a queue (SQS) is the follow-up for anything larger, since GitHub expects an answer within 10 seconds.
-- The design plan is in `docs/plans/` and `C:\Users\glenn\.claude\plans\i-m-building-flakehunter-it-virtual-sutton.md`.
+- The build plans are in `docs/plans/` (`README.md` indexes them; the plans as approved are in `docs/plans/archive/`), and the architecture decision records are in `docs/decisions/`.
 
 <!-- BEGIN AWS Agent Toolkit rules -->
 # AWS Guidance for the new AWS experience

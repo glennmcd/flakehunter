@@ -114,12 +114,36 @@ Security best practices were used including but not limited to:
 - Data is schema validated and size limited
 - AWS deployment specifies rate limiters, explicit SCP, kill switch, cost protection
 
+The full list, the known gaps and how to report a vulnerability are in [docs/SECURITY.md](docs/SECURITY.md).
+
 ## Get started
 
 - [Run it locally or deploy it to AWS](docs/deployment.md)
 - [Send reports from CI, and the API reference](docs/api.md)
 - [Use it from an AI assistant (MCP server)](packages/mcp-server/README.md)
 - [AWS Organization guardrails (SCPs)](infra/scp/README.md)
+
+## How I built this with Claude Code
+
+FlakeHunter was built with [Claude Code](https://claude.com/claude-code). The project files that shaped how it worked:
+
+- [`CLAUDE.md`](CLAUDE.md): the project's memory. Commands, architecture and the conventions that once caused bugs
+  (route prefixes, extensionless imports, Node rather than Bun for CDK), so each session starts with what earlier
+  ones learned.
+- [`.claude/skills/new-endpoint`](.claude/skills/new-endpoint/SKILL.md): a skill for adding an `/api` endpoint
+  test-first, so every route follows the same schema, registration and test steps.
+- [`.claude/agents/code-reviewer.md`](.claude/agents/code-reviewer.md): a read-only reviewer for finished changes, so
+  correctness and test gaps are checked by a fresh context that didn't write the code.
+- [`.claude/agents/security-auditor.md`](.claude/agents/security-auditor.md): a read-only security audit for changes
+  to auth, input handling, the database or dependencies, the parts an attacker reaches first.
+- [`.claude/settings.json`](.claude/settings.json): a guardrail that denies `git commit`, so every change
+  waits for my review and I make every commit myself.
+- [`.claude/launch.json`](.claude/launch.json): the API and dashboard dev servers, so Claude Code can start them and
+  check UI changes in its browser preview.
+
+**Design notes:** each part was planned before any code was written. The [build plans](docs/plans/README.md) give the
+prompt, the plan and what shipped for each part, and the [decision records](docs/decisions/README.md) explain the
+choices behind them.
 
 ## License
 

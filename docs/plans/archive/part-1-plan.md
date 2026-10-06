@@ -1,5 +1,7 @@
 # FlakeHunter — Week 1 Plan
 
+*Archived plan, written as "week 1"; this is Part 1. Summary: [../part-1-ingestion.md](../part-1-ingestion.md).*
+
 ## Context
 
 FlakeHunter is a brand-new project (repo currently empty except a one-line README). It will ingest JUnit XML test reports from GitHub Actions CI runs, store them in Postgres, and flag a test as flaky when it both passes and fails on the same commit SHA. Stack: TypeScript end-to-end — Fastify API, React dashboard, Postgres, bun as package manager/runtime.

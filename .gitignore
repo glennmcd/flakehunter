@@ -13,3 +13,5 @@ next-env.d.ts
 scripts/webhook-url.txt
 cdk.out/
 infra/dist/
+# Claude Code: personal settings (shared ones go in .claude/settings.json)
+.claude/settings.local.json
