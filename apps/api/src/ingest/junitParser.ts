@@ -21,10 +21,21 @@ export interface ParsedSuite {
   testCases: ParsedTestCase[];
 }
 
+/**
+ * A DOCTYPE in the prolog: anything before the root element is a BOM, whitespace, the XML declaration, comments or
+ * processing instructions. A DOCTYPE is the only way to declare custom entities (the "billion laughs" attack), and
+ * JUnit reports never need one, so such reports are refused. A DOCTYPE later in the document is only text, for
+ * example captured HTML inside CDATA, and is left alone.
+ */
+const PROLOG_DOCTYPE = /^﻿?\s*(?:(?:<\?[\s\S]*?\?>|<!--[\s\S]*?-->)\s*)*<!DOCTYPE/i;
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
   parseAttributeValue: true,
+  // With DOCTYPEs refused, only the five standard escapes (&lt; &amp; ...) remain, and they only shorten text. The parser's default caps every document at 1000 expansions of any kind, which a long stack trace
+  // full of &lt; and &gt; exceeds, so that cap is lifted.
+  processEntities: { enabled: true, maxTotalExpansions: Number.POSITIVE_INFINITY },
   // The callback is also called for attributes. A suite's `skipped="2"` count shares its name with the <skipped>
   // element, so without the isAttribute check it would be wrapped in an array and read back as undefined.
   isArray: (tagName, _jPath, _isLeafNode, isAttribute) =>
@@ -95,6 +106,9 @@ function parseTestCase(node: RawNode): ParsedTestCase {
 }
 
 export function parseJunitXml(xml: string, fileName?: string): ParsedSuite[] {
+  if (PROLOG_DOCTYPE.test(xml)) {
+    throw new Error("JUnit reports with a DOCTYPE are not accepted");
+  }
   const parsed = parser.parse(xml) as RawNode;
   const suiteNodes: RawNode[] = [];
   collectSuiteNodes(parsed, suiteNodes);

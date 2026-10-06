@@ -27,7 +27,8 @@ export interface WebStackProps extends StackProps {
  *   dependency". AWS asks for the same thing from pnpm workspaces (`node-linker=hoisted`). Only the Amplify install
  *   uses it; local installs and CI keep the default.
  * - The server runtime does not see Amplify environment variables on its own, so the build writes the three the
- *   dashboard reads into .env.production, which Next loads at runtime.
+ *   dashboard reads into .env.production, which Next loads at runtime. The lines are unquoted; that is safe only
+ *   because the two secrets are limited to ENV_SAFE_SECRET_PATTERN.
  */
 export const BUILD_SPEC = `version: 1
 applications:
@@ -56,6 +57,15 @@ applications:
           - ../../node_modules/**/*
 `;
 
+/**
+ * Characters allowed in the two dashboard secrets. The build writes them unquoted into .env.production, which Next
+ * loads with dotenv and dotenv-expand: a value is cut at "#", "$NAME" is replaced by another variable, and quotes,
+ * backslashes and whitespace change how the line is read, so a password like "k3#9fX..." would silently become "k3".
+ * Quoting and escaping in the build script would still break on quotes, so unsafe characters are refused at deploy.
+ */
+export const ENV_SAFE_SECRET_PATTERN = "^[A-Za-z0-9!%*+,./:=?@^_~-]+$";
+const ENV_SAFE_SECRET_RULE = "Use only letters, digits and ! % * + , - . / : = ? @ ^ _ ~ (no #, $, quotes or spaces).";
+
 export class WebStack extends Stack {
   readonly app: CfnApp;
 
@@ -70,12 +80,16 @@ export class WebStack extends Stack {
       type: "String",
       noEcho: true,
       minLength: 1,
+      allowedPattern: ENV_SAFE_SECRET_PATTERN,
+      constraintDescription: ENV_SAFE_SECRET_RULE,
       description: "The API's read token (the API_TOKEN SSM parameter); server-side only, never sent to browsers",
     });
     const sitePassword = new CfnParameter(this, "SitePassword", {
       type: "String",
       noEcho: true,
       minLength: 8,
+      allowedPattern: ENV_SAFE_SECRET_PATTERN,
+      constraintDescription: ENV_SAFE_SECRET_RULE,
       description: "Password for the site-wide Basic auth gate. Production refuses to serve without one.",
     });
 

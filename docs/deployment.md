@@ -385,7 +385,9 @@ bun run --cwd infra cdk deploy FlakeHunterWeb --profile flakehunter \
 ```
 
 Add the two `-c` flags to `~/.cdk.json` too. The site password is what visitors type (any username); production
-refuses to serve at all without one. The first build normally starts by itself; if the Amplify console shows none:
+refuses to serve at all without one. Both secrets may use only letters, digits and `! % * + , - . / : = ? @ ^ _ ~`
+(no `#`, `$`, quotes or spaces): the build writes them into a `.env` file, where those characters would silently
+change the value, so the deploy refuses them. The first build normally starts by itself; if the Amplify console shows none:
 
 ```bash
 aws amplify start-job --profile flakehunter --region us-east-2 --job-type RELEASE \
