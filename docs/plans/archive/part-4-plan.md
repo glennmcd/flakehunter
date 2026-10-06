@@ -1,5 +1,7 @@
 # FlakeHunter week 3, PR 3: host everything on AWS
 
+*Archived plan, written as "week 3, PR 3"; this is Part 4. Summary: [../part-4-aws.md](../part-4-aws.md).*
+
 Outcome (written when tasks 1-10 below were finished; the plan text is kept as approved)
 All ten tasks are built and tested; nothing has been deployed (that is yours to do, see docs/deployment.md). Where the build differs from the plan:
 Task 6: requests are counted per source IP as well as per token (counting only by token let a flood of invented tokens each start a fresh budget), and no TRUST_PROXY setting is needed because API Gateway supplies the client IP.

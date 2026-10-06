@@ -114,7 +114,8 @@ against a fake `aws`, not against a real Organization, so run `--dry-run` first.
 ## 2. `flakehunter-budget-freeze.json` (attached by a budget action, never by hand)
 
 Denies everything except reading, deleting, and the actions needed to recover (STS, billing, `lambda:PutFunctionConcurrency`,
-log writes). It stops **cost growth**: no new resources, deploys or updates, by anyone. It does **not** stop the
+log writes). Reading includes Route 53 and ACM, so a custom domain's records and certificate stay visible, but they
+cannot be changed or deleted during a freeze. It stops **cost growth**: no new resources, deploys or updates, by anyone. It does **not** stop the
 running API: an SCP only restricts IAM principals, and API Gateway calls Lambda as a service principal. The stop
 itself is the kill switch in the CDK (`ApiStack`): at 100% of the monthly budget (default $30) the account budget
 publishes to an SNS topic and a small Lambda sets the API function's reserved concurrency to 0, which refuses every

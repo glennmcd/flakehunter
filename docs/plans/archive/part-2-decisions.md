@@ -1,3 +1,6 @@
+*Archived questions and answers, written as "week 2"; this is Part 2. They became ADRs 0002, 0005 and 0006 in
+[../../decisions/](../../decisions/README.md).*
+
 JUnit XML carries no commit SHA, run id, or attempt, but flaky detection needs the SHA and idempotency needs the run id. How should POST /api/reports receive them?
 
 Raw XML body + headers (Recommended)

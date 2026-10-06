@@ -1,3 +1,6 @@
+*Archived decision notes, written as "week 1"; this is Part 1. They became ADRs 0001-0004 in
+[../../decisions/](../../decisions/README.md).*
+
 ADRs
 
 Chose Postgres given real database with free tier and PGlite for testing.  Sqlite would also be a choice but more limited upgrade path.

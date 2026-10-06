@@ -45,4 +45,4 @@ bun run lint && bun run typecheck && bun run test
 Fix with `bun run lint:fix`. If the web app will call it, export the response type from shared-types and add a helper in `apps/web/src/lib/`.
 
 ## 7. Docs
-`docs/api.md` does not exist yet. Document the endpoint in the "Read endpoints" list in `CLAUDE.md` (and `README.md` if user-facing). Don't commit; the user does that.
+Document the endpoint in the "Read endpoints" list in `CLAUDE.md` and, if user-facing, in `docs/api.md`. Don't commit; the user does that.

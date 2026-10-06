@@ -53,7 +53,7 @@ Revoking an upload token (takes effect on its next request; running it twice is 
 REVOKE_TOKEN=<token> bun run --env-file=apps/api/.env scripts/revoke-repo-token.ts
 ```
 
-Seeding demo data through the real upload endpoint (see README, "Demo data"):
+Seeding demo data through the real upload endpoint (see `docs/deployment.md`, "Demo data"):
 
 ```bash
 DEMO_UPLOAD_TOKEN=<token> bun run seed:demo              # DEMO_API_URL, DEMO_DAYS, DEMO_SEED optional
@@ -95,7 +95,7 @@ The ingestion path runs from the webhook route through the `ingest/` modules:
 - It authenticates with a per-repo token, not `API_TOKEN`: a route-level `onRequest` hook calls `auth/repoToken.ts` (`findRepoByToken`, sha256 lookup, revocable). The repo comes from the token, never from the request. The hook runs before body parsing and header validation.
 - `ingest/ingestReport.ts` does the work in one transaction. Idempotency is the `reports` table, unique on `(run_id, report_key)`; the run is keyed on `(repo_id, github_run_id, attempt)`. A repeat returns 200 with the original counts (stored on the `reports` row); a first upload returns 201. A SHA that contradicts an existing run is a 400, and an existing run row (e.g. from the webhook) is reused, not overwritten.
 - Unparseable bodies or reports with no `<testsuite>` are `invalid_report` (422) and leave nothing behind.
-- **gzip:** `Content-Encoding: gzip` is accepted (`http/gzipBody.ts`, a `preParsing` hook that runs after the token check). The 11 MB limit applies to the **decompressed** size, enforced while streaming so a decompression bomb is destroyed at the limit (`413 payload_too_large`); bad gzip data is a `400`, and any other encoding is a `400`. This matters because a Lambda request body is capped near 6 MB (about 4.5 MB raw after base64), so large reports must be sent compressed; `scripts/seed-demo.ts` and the README snippet do.
+- **gzip:** `Content-Encoding: gzip` is accepted (`http/gzipBody.ts`, a `preParsing` hook that runs after the token check). The 11 MB limit applies to the **decompressed** size, enforced while streaming so a decompression bomb is destroyed at the limit (`413 payload_too_large`); bad gzip data is a `400`, and any other encoding is a `400`. This matters because a Lambda request body is capped near 6 MB (about 4.5 MB raw after base64), so large reports must be sent compressed; `scripts/seed-demo.ts` and the CI snippet in `docs/api.md` do.
 - **Rate limit:** an `onRequest` hook (`plugins/rateLimit.ts`, `ratelimit/`) runs before the token lookup and counts each request under its source IP and, if it sends one, a sha256 of its bearer token (the raw token is never stored). Past `UPLOAD_RATE_LIMIT_MAX` (default 120) per `UPLOAD_RATE_LIMIT_WINDOW_SECONDS` (default 60) it answers `429 rate_limited` with `Retry-After`. Counting by IP is what stops a flood of invented tokens. The store is a `RateLimitStore`: in memory for tests and local runs, a DynamoDB fixed-window counter (atomic `ADD`, TTL) on Lambda, where `buildApp` refuses to start without `RATE_LIMIT_TABLE`. A failing store lets requests through and logs a warning. `buildApp({ rateLimit })` overrides it in tests; tests that upload many reports from one address (the seed e2e) raise the limit.
 
 Read endpoints (global `API_TOKEN`), all under `/api`:
@@ -183,7 +183,7 @@ A CDK app (TypeScript) with two stacks in us-east-2: `FlakeHunterApi` (Lambda, A
   ```bash
   bun run tunnel
   ```
-  `scripts/tunnel.ts` wraps `cloudflared tunnel --url http://localhost:3000`, passes its output through, and writes `<tunnel URL>/webhooks/github` to the git-ignored `scripts/webhook-url.txt` (overwritten each run; logic and tests in `scripts/tunnel/`). The hostname changes on every start, so update the webhook URL each time (see README).
+  `scripts/tunnel.ts` wraps `cloudflared tunnel --url http://localhost:3000`, passes its output through, and writes `<tunnel URL>/webhooks/github` to the git-ignored `scripts/webhook-url.txt` (overwritten each run; logic and tests in `scripts/tunnel/`). The hostname changes on every start, so update the webhook URL each time (see `docs/deployment.md`, "Point GitHub at FlakeHunter").
 - The test fixture repo is `glennmcd/flakehunter-test-fixture`. Its "maybe flaky test" fails about half the time, so re-running `test.yml` on the same commit produces flaky data.
 - On Windows, a background server can keep holding port 3000 after its shell is gone. Find it with `netstat -ano` and stop it with `taskkill //F //PID <pid>`; bash `kill` uses different PIDs.
 
@@ -193,7 +193,7 @@ A CDK app (TypeScript) with two stacks in us-east-2: `FlakeHunterApi` (Lambda, A
 - Read auth is a single static token; upload tokens are per repo but have no management endpoint (mint with `scripts/create-repo-token.ts`, revoke with `scripts/revoke-repo-token.ts`). There is no OAuth.
 - Upload rate limiting exists (per IP and per token); reads are limited only by API Gateway throttling. There is no OpenAPI document for `/api`. The week-1 routes (`/repos`, `/flaky`, `/runs`, `/tests`) no longer have a caller since the old Vite dashboard was removed (`apps/web` uses the v1 API); removing them is a follow-up.
 - Webhook processing still runs inside the request (artifact download and unzip). That suits small demo artifacts; a queue (SQS) is the follow-up for anything larger, since GitHub expects an answer within 10 seconds.
-- The design plan is in `docs/plans/` and `C:\Users\glenn\.claude\plans\i-m-building-flakehunter-it-virtual-sutton.md`.
+- The build plans are in `docs/plans/` (`README.md` indexes them; the plans as approved are in `docs/plans/archive/`), and the architecture decision records are in `docs/decisions/`.
 
 <!-- BEGIN AWS Agent Toolkit rules -->
 # AWS Guidance for the new AWS experience
