@@ -42,7 +42,7 @@ describe("load-aws-secret.sh", () => {
     const aws = fakeAws({ output: "s3cr3t-value" });
     expect(load("TARGET", aws)).toMatchObject({ status: 0, value: "s3cr3t-value", stderr: "" });
     expect(aws.args()).toBe(
-      "ssm get-parameter --name /flakehunter/demo/TARGET --with-decryption --query Parameter.Value --output text --profile flakehunter --region us-east-2",
+      "ssm get-parameter --name /flakehunter/demo/TARGET --with-decryption --query Parameter.Value --output text --profile g26work --region us-east-2",
     );
   });
 

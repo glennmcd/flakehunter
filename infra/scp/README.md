@@ -1,18 +1,18 @@
 # Service control policies
 
-Two SCPs for the `flakehunter` member account (`<flakehunter-account-id>`) in the Organization. Neither is created by CDK and
+Two SCPs for the `g26work` member account (`<g26work-account-id>`) in the Organization. Neither is created by CDK and
 nothing here has been attached: SCPs are managed from the **management account** (`<management-account-id>`), so you run these
 commands there. SCPs never apply to the management account itself, and they only restrict; they grant nothing.
 
 Both policies exempt the AWS-managed `/managed/AWSManaged*` roles so the project can still be administered. Validated
 with `accessanalyzer validate-policy --policy-type SERVICE_CONTROL_POLICY` (no findings). Each is far under the
 10,240-character limit, but an account, OU or root can have **at most 5 SCPs attached**, and the AWS-managed ones
-count, so check `aws organizations list-policies-for-target --profile flakehunter-mgmt` first.
+count, so check `aws organizations list-policies-for-target --profile g26work-mgmt` first.
 
 ## Your account ids
 
 The two AWS account ids are not stored in this repository. Wherever a command here shows `<management-account-id>` or
-`<flakehunter-account-id>`, put your own 12-digit id. The scripts in `scripts/` read them from the environment and
+`<g26work-account-id>`, put your own 12-digit id. The scripts in `scripts/` read them from the environment and
 refuse to run without them, so export both once per shell, for example in your shell profile.
 
 The management account:
@@ -24,10 +24,10 @@ export FH_MGMT_ACCOUNT_ID=<management-account-id>
 The `flakehunter` account, the one the policies are attached to:
 
 ```bash
-export FH_SCP_TARGET_ID=<flakehunter-account-id>
+export FH_SCP_TARGET_ID=<g26work-account-id>
 ```
 
-`aws sts get-caller-identity --profile flakehunter-mgmt` and `aws sts get-caller-identity --profile flakehunter` print
+`aws sts get-caller-identity --profile g26work-mgmt` and `aws sts get-caller-identity --profile g26work` print
 the ids. The scripts check them against the profile before they change anything, which is what stops a wrong profile.
 
 ## 1. `flakehunter-guardrails.json` (attach always)
@@ -63,28 +63,28 @@ yourself out of something, fix it from the management account (detach the policy
 
 ```bash
 # In the management account
-aws organizations create-policy --profile flakehunter-mgmt --type SERVICE_CONTROL_POLICY --name FlakeHunterGuardrails \
+aws organizations create-policy --profile g26work-mgmt --type SERVICE_CONTROL_POLICY --name FlakeHunterGuardrails \
   --description "FlakeHunter: us-east-2 only, allow-listed services" \
   --content file://infra/scp/flakehunter-guardrails.json
-aws organizations attach-policy --profile flakehunter-mgmt --policy-id <p-id from above> --target-id <flakehunter-account-id>
+aws organizations attach-policy --profile g26work-mgmt --policy-id <p-id from above> --target-id <g26work-account-id>
 ```
 
 Roll back (management account). First list the policies attached to the account to find the `<p-id>`:
 
 ```bash
-aws organizations list-policies-for-target --profile flakehunter-mgmt --target-id <flakehunter-account-id> --filter SERVICE_CONTROL_POLICY
+aws organizations list-policies-for-target --profile g26work-mgmt --target-id <g26work-account-id> --filter SERVICE_CONTROL_POLICY
 ```
 
 Then detach it:
 
 ```bash
-aws organizations detach-policy --profile flakehunter-mgmt --policy-id <p-id> --target-id <flakehunter-account-id>
+aws organizations detach-policy --profile g26work-mgmt --policy-id <p-id> --target-id <g26work-account-id>
 ```
 
 ### The same steps as scripts
 
 `scripts/scp-apply-guardrails.sh` and `scripts/scp-rollback-guardrails.sh` do the commands above for you, with the
-checks the manual steps leave to you. Sign in to the management account first (`aws login --profile flakehunter-mgmt`).
+checks the manual steps leave to you. Sign in to the management account first (`aws login --profile g26work-mgmt`).
 Both stop without changing anything unless the profile really is the management account (`<management-account-id>`), and the
 apply script also stops if the account already has 5 SCPs attached.
 
@@ -138,7 +138,7 @@ Run these in the management account, in this order, each one after the previous.
 1. Create the freeze policy and note the policy id (`p-...`) it prints:
 
    ```bash
-   aws organizations create-policy --profile flakehunter-mgmt --type SERVICE_CONTROL_POLICY --name FlakeHunterBudgetFreeze \
+   aws organizations create-policy --profile g26work-mgmt --type SERVICE_CONTROL_POLICY --name FlakeHunterBudgetFreeze \
      --description "Applied by a budget action: no changes, read and recovery only" \
      --content file://infra/scp/flakehunter-budget-freeze.json
    ```
@@ -146,20 +146,20 @@ Run these in the management account, in this order, each one after the previous.
 2. Create the role AWS Budgets assumes to attach the policy. The trusted service is `budgets.amazonaws.com`:
 
    ```bash
-   aws iam create-role --profile flakehunter-mgmt --role-name FlakeHunterBudgetActionRole --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"budgets.amazonaws.com"},"Action":"sts:AssumeRole","Condition":{"StringEquals":{"aws:SourceAccount":"<management-account-id>"}}}]}'
+   aws iam create-role --profile g26work-mgmt --role-name FlakeHunterBudgetActionRole --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"budgets.amazonaws.com"},"Action":"sts:AssumeRole","Condition":{"StringEquals":{"aws:SourceAccount":"<management-account-id>"}}}]}'
    ```
 
 3. Allow the role to attach and detach SCPs, and nothing else:
 
    ```bash
-   aws iam put-role-policy --profile flakehunter-mgmt --role-name FlakeHunterBudgetActionRole --policy-name AttachFreezeScp --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["organizations:AttachPolicy","organizations:DetachPolicy"],"Resource":"*"}]}'
+   aws iam put-role-policy --profile g26work-mgmt --role-name FlakeHunterBudgetActionRole --policy-name AttachFreezeScp --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["organizations:AttachPolicy","organizations:DetachPolicy"],"Resource":"*"}]}'
    ```
 
 4. Print the role's ARN. It should be `arn:aws:iam::<management-account-id>:role/FlakeHunterBudgetActionRole`, which is the
    value `--execution-role-arn` uses below:
 
    ```bash
-   aws iam get-role --profile flakehunter-mgmt --role-name FlakeHunterBudgetActionRole --query Role.Arn --output text
+   aws iam get-role --profile g26work-mgmt --role-name FlakeHunterBudgetActionRole --query Role.Arn --output text
    ```
 
    The role is not tested. The `aws:SourceAccount` condition guards against the confused-deputy problem, but if the
@@ -170,20 +170,20 @@ Run these in the management account, in this order, each one after the previous.
 5. Create the budget:
 
    ```bash
-   aws budgets create-budget --profile flakehunter-mgmt --account-id <management-account-id> --budget '{
+   aws budgets create-budget --profile g26work-mgmt --account-id <management-account-id> --budget '{
      "BudgetName": "flakehunter-freeze", "BudgetType": "COST", "TimeUnit": "MONTHLY",
      "BudgetLimit": {"Amount": "30", "Unit": "USD"},
-     "CostFilters": {"LinkedAccount": ["<flakehunter-account-id>"]}
+     "CostFilters": {"LinkedAccount": ["<g26work-account-id>"]}
    }'
    ```
 
 6. Create the budget action. Replace the policy id with the one from step 1 and the email with yours:
 
    ```bash
-   aws budgets create-budget-action --profile flakehunter-mgmt --account-id <management-account-id> --budget-name flakehunter-freeze \
+   aws budgets create-budget-action --profile g26work-mgmt --account-id <management-account-id> --budget-name flakehunter-freeze \
      --notification-type ACTUAL --action-type APPLY_SCP_POLICY \
      --action-threshold ActionThresholdValue=100,ActionThresholdType=PERCENTAGE \
-     --definition 'ScpActionDefinition={PolicyId=<p-id of the freeze policy>,TargetIds=[<flakehunter-account-id>]}' \
+     --definition 'ScpActionDefinition={PolicyId=<p-id of the freeze policy>,TargetIds=[<g26work-account-id>]}' \
      --execution-role-arn arn:aws:iam::<management-account-id>:role/FlakeHunterBudgetActionRole --approval-model MANUAL \
      --subscribers SubscriptionType=EMAIL,Address=<you@example.com>
    ```
@@ -196,26 +196,26 @@ The role and budget commands have not been run; check the syntax against `aws bu
 Management account: lift the freeze. First list the policies attached to the account to find the `<freeze p-id>`:
 
 ```bash
-aws organizations list-policies-for-target --profile flakehunter-mgmt --target-id <flakehunter-account-id> --filter SERVICE_CONTROL_POLICY
+aws organizations list-policies-for-target --profile g26work-mgmt --target-id <g26work-account-id> --filter SERVICE_CONTROL_POLICY
 ```
 
 Then detach it:
 
 ```bash
-aws organizations detach-policy --profile flakehunter-mgmt --policy-id <freeze p-id> --target-id <flakehunter-account-id>
+aws organizations detach-policy --profile g26work-mgmt --policy-id <freeze p-id> --target-id <g26work-account-id>
 ```
 
 `flakehunter` account: let the API run again (this also restores normal unreserved concurrency). First look up the
 function name, which is the `FunctionName` output of the `FlakeHunterApi` stack:
 
 ```bash
-aws cloudformation describe-stacks --profile flakehunter --region us-east-2 --stack-name FlakeHunterApi --query "Stacks[0].Outputs[?OutputKey=='FunctionName'].OutputValue" --output text
+aws cloudformation describe-stacks --profile g26work --region us-east-2 --stack-name FlakeHunterApi --query "Stacks[0].Outputs[?OutputKey=='FunctionName'].OutputValue" --output text
 ```
 
 Then remove the concurrency limit, using that name as `<FunctionName output>`:
 
 ```bash
-aws lambda delete-function-concurrency --profile flakehunter --region us-east-2 --function-name <FunctionName output>
+aws lambda delete-function-concurrency --profile g26work --region us-east-2 --function-name <FunctionName output>
 ```
 
 Do both only after fixing whatever caused the spend, or raise `monthlyBudgetUsd` and redeploy; the budget resets
@@ -223,8 +223,8 @@ on the first of the month.
 
 ### The same recovery as a script
 
-`scripts/scp-rollback-freeze.sh` does both steps. Sign in to both accounts first (`aws login --profile flakehunter-mgmt`
-and `aws login --profile flakehunter`). It checks both accounts before it changes either, finds the function name
+`scripts/scp-rollback-freeze.sh` does both steps. Sign in to both accounts first (`aws login --profile g26work-mgmt`
+and `aws login --profile g26work`). It checks both accounts before it changes either, finds the function name
 from the stack's `FunctionName` output, and asks you to type `yes` (`--yes` skips the question).
 
 See what it would do. This only reads from AWS:
@@ -257,62 +257,62 @@ not the cause. SCP changes can take a few minutes to apply, so wait before concl
 
 | Check | Command | Expect |
 | --- | --- | --- |
-| You are in the management account | `aws sts get-caller-identity --profile flakehunter-mgmt` | account `<management-account-id>` |
-| Room for one more SCP | `aws organizations list-policies-for-target --profile flakehunter-mgmt --target-id <flakehunter-account-id> --filter SERVICE_CONTROL_POLICY` | fewer than 5 policies (AWS-managed ones count) |
-| The policy text is still valid | `aws accessanalyzer validate-policy --profile flakehunter-mgmt --policy-type SERVICE_CONTROL_POLICY --policy-document file://infra/scp/<file>.json` | `"findings": []` |
+| You are in the management account | `aws sts get-caller-identity --profile g26work-mgmt` | account `<management-account-id>` |
+| Room for one more SCP | `aws organizations list-policies-for-target --profile g26work-mgmt --target-id <g26work-account-id> --filter SERVICE_CONTROL_POLICY` | fewer than 5 policies (AWS-managed ones count) |
+| The policy text is still valid | `aws accessanalyzer validate-policy --profile g26work-mgmt --policy-type SERVICE_CONTROL_POLICY --policy-document file://infra/scp/<file>.json` | `"findings": []` |
 | The budget action syntax is right | `aws budgets create-budget-action help` | the README flags match the installed CLI; fix the README if not |
 
 ### B. Guardrails SCP, right after attaching it (from the `flakehunter` account)
 
-1. **You are not locked out.** Run `aws sts get-caller-identity --profile flakehunter` and `aws lambda list-functions --profile flakehunter --region us-east-2`.
+1. **You are not locked out.** Run `aws sts get-caller-identity --profile g26work` and `aws lambda list-functions --profile g26work --region us-east-2`.
    Both must work. If anything essential fails, detach the policy (command above) and read the error.
-2. **Region lock:** `aws lambda list-functions --profile flakehunter --region us-west-2` must be denied.
-3. **Service allow-list:** `aws ec2 describe-instances --profile flakehunter --region us-east-2` must be denied (EC2 is not on the list).
-4. **No IAM users:** `aws iam create-user --profile flakehunter --user-name scp-test` must be denied. If it succeeds, delete the user
-   (`aws iam delete-user --profile flakehunter --user-name scp-test`) and re-check which policy is attached.
+2. **Region lock:** `aws lambda list-functions --profile g26work --region us-west-2` must be denied.
+3. **Service allow-list:** `aws ec2 describe-instances --profile g26work --region us-east-2` must be denied (EC2 is not on the list).
+4. **No IAM users:** `aws iam create-user --profile g26work --user-name scp-test` must be denied. If it succeeds, delete the user
+   (`aws iam delete-user --profile g26work --user-name scp-test`) and re-check which policy is attached.
 5. **Kill-switch protection** (test on a throwaway topic, so a failed test deletes nothing real):
    ```bash
-   aws sns create-topic --profile flakehunter --region us-east-2 --name FlakeHunterApi-BudgetStopTopicScpTest
-   aws sns delete-topic --profile flakehunter --region us-east-2 --topic-arn <the arn it printed>   # must be denied
+   aws sns create-topic --profile g26work --region us-east-2 --name FlakeHunterApi-BudgetStopTopicScpTest
+   aws sns delete-topic --profile g26work --region us-east-2 --topic-arn <the arn it printed>   # must be denied
    ```
    Creating works because only changes are blocked. The throwaway topic matches the same name pattern as the real
    one, so you cannot delete it either until the policy is detached: detach, delete it, re-attach.
 6. **The deploy still works.** The CloudFormation execution role is subject to the Region and service rules, so run
-   `bun run --cwd infra cdk diff --profile flakehunter` and then a deploy. Any `explicit deny in a service control policy` error names the
+   `bun run --cwd infra cdk diff --profile g26work` and then a deploy. Any `explicit deny in a service control policy` error names the
    action to add to the allow-list.
 
 If a denial is unclear, find the call and its error in CloudTrail:
-`aws cloudtrail lookup-events --profile flakehunter --region us-east-2 --lookup-attributes AttributeKey=EventName,AttributeValue=<EventName> --max-results 5`.
+`aws cloudtrail lookup-events --profile g26work --region us-east-2 --lookup-attributes AttributeKey=EventName,AttributeValue=<EventName> --max-results 5`.
 
 ### C. Kill switch in the CDK stack (after deploying with `alertEmail`)
 
 1. **The budget has three notifications, and the last one targets SNS:**
-   `aws budgets describe-notifications-for-budget --profile flakehunter --account-id <flakehunter-account-id> --budget-name <name from describe-budgets>`
+   `aws budgets describe-notifications-for-budget --profile g26work --account-id <g26work-account-id> --budget-name <name from describe-budgets>`
    then `describe-subscribers-for-notification` (same `--profile` and `--account-id`) for the 100% ACTUAL one. Expect an EMAIL and an SNS subscriber.
-2. **The topic reaches the function.** Run `aws sns list-subscriptions-by-topic --profile flakehunter --topic-arn <BudgetStopTopic arn>`:
+2. **The topic reaches the function.** Run `aws sns list-subscriptions-by-topic --profile g26work --topic-arn <BudgetStopTopic arn>`:
    one `lambda` subscription, with a confirmed (non-pending) ARN.
 3. **The stop function works end to end** (this stops the real API, so do it when nothing depends on it). First look
    up the stop function's name. The stack generates the names of its functions and log groups, so there is no fixed
    `/aws/lambda/<name>` log group to guess:
 
    ```bash
-   aws cloudformation list-stack-resources --profile flakehunter --region us-east-2 --stack-name FlakeHunterApi --query "StackResourceSummaries[?starts_with(LogicalResourceId,'BudgetStopFunction')&&ResourceType=='AWS::Lambda::Function'].PhysicalResourceId" --output text
+   aws cloudformation list-stack-resources --profile g26work --region us-east-2 --stack-name FlakeHunterApi --query "StackResourceSummaries[?starts_with(LogicalResourceId,'BudgetStopFunction')&&ResourceType=='AWS::Lambda::Function'].PhysicalResourceId" --output text
    ```
 
    Then ask that function for its log group:
 
    ```bash
-   aws lambda get-function-configuration --profile flakehunter --region us-east-2 --function-name <BudgetStopFunction name> --query LoggingConfig.LogGroup --output text
+   aws lambda get-function-configuration --profile g26work --region us-east-2 --function-name <BudgetStopFunction name> --query LoggingConfig.LogGroup --output text
    ```
 
    Now run the test, using that log group as `<BudgetStopFunction log group>`:
 
    ```bash
-   aws sns publish --profile flakehunter --region us-east-2 --topic-arn <BudgetStopTopic arn> --message test   # stands in for the budget
-   aws lambda get-function-concurrency --profile flakehunter --region us-east-2 --function-name <fn>          # ReservedConcurrentExecutions: 0
+   aws sns publish --profile g26work --region us-east-2 --topic-arn <BudgetStopTopic arn> --message test   # stands in for the budget
+   aws lambda get-function-concurrency --profile g26work --region us-east-2 --function-name <fn>          # ReservedConcurrentExecutions: 0
    curl -i <api>/health                                                                  # now fails (expect a 5xx)
-   aws logs tail --profile flakehunter --region us-east-2 <BudgetStopFunction log group> --since 5m           # "set to 0"
-   aws lambda delete-function-concurrency --profile flakehunter --region us-east-2 --function-name <fn>       # undo
+   aws logs tail --profile g26work --region us-east-2 <BudgetStopFunction log group> --since 5m           # "set to 0"
+   aws lambda delete-function-concurrency --profile g26work --region us-east-2 --function-name <fn>       # undo
    curl -i <api>/health                                                                  # 200 again
    ```
 
@@ -325,32 +325,32 @@ If a denial is unclear, find the call and its error in CloudTrail:
    `-c monthlyBudgetUsd=1` while the account already has more than $1 of month-to-date spend, wait for the next data
    refresh (up to about a day), confirm the function log shows the stop, then undo as above and redeploy at 30.
 5. **The topic policy** (Budgets in this account only) is covered by the template tests; to confirm it live, run
-   `aws sns get-topic-attributes --profile flakehunter --topic-arn <arn> --query Attributes.Policy` and check the `aws:SourceAccount` condition.
+   `aws sns get-topic-attributes --profile g26work --topic-arn <arn> --query Attributes.Policy` and check the `aws:SourceAccount` condition.
 
 ### D. Freeze SCP and the management-account budget
 
 1. **Policy behaviour, attached by hand.** In a quiet moment attach `FlakeHunterBudgetFreeze` to the account
    (`attach-policy` as in step 1), wait a few minutes, then from the `flakehunter` account:
-   - `aws lambda list-functions --profile flakehunter --region us-east-2`: works (read).
-   - `aws lambda update-function-configuration --profile flakehunter --function-name <fn> --memory-size 1024`: denied (write).
-   - `aws lambda put-function-concurrency --profile flakehunter --function-name <fn> --reserved-concurrent-executions 0`: works (the stop).
-   - `aws lambda delete-function-concurrency --profile flakehunter --function-name <fn>`: works (recovery).
-   - `aws sts get-caller-identity --profile flakehunter`: works.
+   - `aws lambda list-functions --profile g26work --region us-east-2`: works (read).
+   - `aws lambda update-function-configuration --profile g26work --function-name <fn> --memory-size 1024`: denied (write).
+   - `aws lambda put-function-concurrency --profile g26work --function-name <fn> --reserved-concurrent-executions 0`: works (the stop).
+   - `aws lambda delete-function-concurrency --profile g26work --function-name <fn>`: works (recovery).
+   - `aws sts get-caller-identity --profile g26work`: works.
 
    Then `detach-policy` and repeat the update call to confirm it is allowed again.
 2. **The Budgets role.** Check that the role's trust policy names `budgets.amazonaws.com` and that it allows
    `organizations:AttachPolicy` and `organizations:DetachPolicy`:
-   `aws iam get-role --profile flakehunter-mgmt --role-name FlakeHunterBudgetActionRole` and
-   `aws iam list-role-policies --profile flakehunter-mgmt --role-name FlakeHunterBudgetActionRole` (the permission is an
+   `aws iam get-role --profile g26work-mgmt --role-name FlakeHunterBudgetActionRole` and
+   `aws iam list-role-policies --profile g26work-mgmt --role-name FlakeHunterBudgetActionRole` (the permission is an
    inline policy, so `list-attached-role-policies` would show nothing).
 3. **The action exists and is wired as intended:**
-   `aws budgets describe-budget-actions-for-budget --profile flakehunter-mgmt --account-id <management-account-id> --budget-name flakehunter-freeze`
-   Expect `ActionType: APPLY_SCP_POLICY`, the freeze policy id, target `<flakehunter-account-id>`, `ApprovalModel: MANUAL`,
+   `aws budgets describe-budget-actions-for-budget --profile g26work-mgmt --account-id <management-account-id> --budget-name flakehunter-freeze`
+   Expect `ActionType: APPLY_SCP_POLICY`, the freeze policy id, target `<g26work-account-id>`, `ApprovalModel: MANUAL`,
    threshold 100.
 4. **Dry run of the trigger, without applying anything.** Create a copy of the budget at `$0.01` with the same
    action and `MANUAL` approval, wait for a data refresh, and confirm the action shows as **pending approval** in
    the Budgets console. Do not approve it. Delete the test budget afterwards
-   (`aws budgets delete-budget --profile flakehunter-mgmt --account-id <management-account-id> --budget-name <test name>`). A pending action with the right
+   (`aws budgets delete-budget --profile g26work-mgmt --account-id <management-account-id> --budget-name <test name>`). A pending action with the right
    policy and target is proof the wiring works. To prove the attach itself, approve it against a throwaway member
    account instead of `flakehunter`.
 5. **Recovery.** Whenever the freeze has been attached, run the two recovery commands above and confirm a normal
@@ -360,6 +360,6 @@ If a denial is unclear, find the call and its error in CloudTrail:
 
 - After any CDK change to the services or to the Lambda or topic names, rerun B6. The name patterns in
   `ProtectBudgetKillSwitch` (`FlakeHunterApi-BudgetStopFunction*`, `FlakeHunterApi-BudgetStopTopic*`) must still match
-  the real names: `aws lambda list-functions --profile flakehunter --query "Functions[].FunctionName"`.
+  the real names: `aws lambda list-functions --profile g26work --query "Functions[].FunctionName"`.
 - After changing a policy file, validate it again (A, third row) and update the attached policy with
-  `aws organizations update-policy --profile flakehunter-mgmt --policy-id <id> --content file://infra/scp/<policy file>.json`.
+  `aws organizations update-policy --profile g26work-mgmt --policy-id <id> --content file://infra/scp/<policy file>.json`.

@@ -30,6 +30,12 @@ const SCENARIOS: Record<string, { stack: string; props: object }> = {
     repository: "https://github.com/glennmcd/flakehunter",
     githubTokenSecretName: "flakehunter/github-token",
   }),
+  webDomain: web({ customDomain: { domainName: "example.com", subDomains: ["", "www", "app.dev"] } }),
+  webDomainBranch: web({ branch: "release", customDomain: { domainName: "example.com", subDomains: ["www"] } }),
+  badDomainName: web({ customDomain: { domainName: "Example.com", subDomains: [""] } }),
+  badDomainNoSubDomains: web({ customDomain: { domainName: "example.com", subDomains: [] } }),
+  badDomainPrefix: web({ customDomain: { domainName: "example.com", subDomains: ["-www"] } }),
+  badDomainDuplicate: web({ customDomain: { domainName: "example.com", subDomains: ["www", "www"] } }),
 };
 
 interface Scenario {
@@ -399,6 +405,61 @@ describe("WebStack Amplify app", () => {
     expect(JSON.parse(read("apps/web/package.json")).scripts.build).toBeDefined();
     const ciBun = /bun-version:\s*([\d.]+)/.exec(read(".github/workflows/ci.yml"))?.[1];
     expect(spec).toContain(`bun@${ciBun}`);
+  });
+});
+
+describe("WebStack custom domain", () => {
+  const domain = (name: string) =>
+    scenario(name).template.findResources("AWS::Amplify::Domain") as Record<
+      string,
+      { Properties: Record<string, unknown>; DependsOn?: string[] }
+    >;
+
+  it("creates no domain association unless one is given", () => {
+    scenario("webDefaults").template.resourceCountIs("AWS::Amplify::Domain", 0);
+    scenario("webConnected").template.resourceCountIs("AWS::Amplify::Domain", 0);
+  });
+
+  it("serves each prefix from the branch on the app, with no automatic subdomains", () => {
+    scenario("webDomain").template.hasResourceProperties("AWS::Amplify::Domain", {
+      AppId: { "Fn::GetAtt": [Match.stringLikeRegexp("^WebApp"), "AppId"] },
+      DomainName: "example.com",
+      EnableAutoSubDomain: false,
+      SubDomainSettings: [
+        { Prefix: "", BranchName: "main" },
+        { Prefix: "www", BranchName: "main" },
+        { Prefix: "app.dev", BranchName: "main" },
+      ],
+    });
+    scenario("webDomainBranch").template.hasResourceProperties("AWS::Amplify::Domain", {
+      SubDomainSettings: [{ Prefix: "www", BranchName: "release" }],
+    });
+  });
+
+  it("has the logical id the import of an existing association maps to, and leaves the certificate to Amplify", () => {
+    const resources = domain("webDomain");
+    expect(Object.keys(resources)).toEqual(["Domain"]);
+    expect(resources.Domain?.Properties).not.toHaveProperty("CertificateSettings");
+  });
+
+  it("waits for the branch, which it names only by a plain string", () => {
+    expect(domain("webDomain").Domain?.DependsOn).toContain("Branch");
+  });
+
+  it("rejects a malformed domain, an empty prefix list, a bad prefix and a repeated one, naming the field", () => {
+    expect(scenario("badDomainName").error).toContain("customDomain.domainName");
+    expect(scenario("badDomainNoSubDomains").error).toContain("customDomain.subDomains must list");
+    expect(scenario("badDomainPrefix").error).toContain('invalid prefix: "-www"');
+    expect(scenario("badDomainDuplicate").error).toContain("twice");
+  });
+});
+
+describe("cdk.json custom domain", () => {
+  // g26work.com and www belong to the g26work-site app; the dashboard has its own subdomain as a separate association
+  // (docs/deployment.md, "Custom domain").
+  it("is flakehunter.g26work.com alone, served at its own root", () => {
+    const context = JSON.parse(readFileSync(path.join(infraRoot, "cdk.json"), "utf8")).context;
+    expect(context.customDomain).toEqual({ domainName: "flakehunter.g26work.com", subDomains: [""] });
   });
 });
 

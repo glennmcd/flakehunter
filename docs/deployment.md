@@ -227,15 +227,15 @@ GitHub repository, go to "Deploying from a new clone or repository" after step 8
 - **Tools.** `bun install` at the repo root (the CDK CLI is installed by it; without it every `cdk` command fails with
   "Cannot find module"); Node 22 or newer (the CDK app runs under Node); the AWS CLI signed in:
   ```bash
-  aws login --region us-east-2 --profile flakehunter
-  aws sts get-caller-identity --profile flakehunter     # shows the project and role
+  aws login --region us-east-2 --profile g26work
+  aws sts get-caller-identity --profile g26work     # shows the project and role
   ```
   Logins last 12 hours; run `aws login` again when a command says the session expired.
 - **Lambda concurrency quota.** A new account may have a total of 10 concurrent executions, which leaves no room to
   reserve any for this function (AWS needs 10 unreserved). Check, and only pass `-c reservedConcurrency=N` if the
   quota is comfortably above 10:
   ```bash
-  aws lambda get-account-settings --profile flakehunter --region us-east-2 --query 'AccountLimit.ConcurrentExecutions'
+  aws lambda get-account-settings --profile g26work --region us-east-2 --query 'AccountLimit.ConcurrentExecutions'
   ```
 
 ## 1. Demo database (Neon)
@@ -277,7 +277,7 @@ stack grants it read access to exactly these four and never creates them, so no 
 
 ```bash
 export API_TOKEN="$(openssl rand -hex 32)"            # the dashboard's read token; keep it for steps 6 and 8
-put() { MSYS_NO_PATHCONV=1 aws ssm put-parameter --profile flakehunter --region us-east-2 --type SecureString \
+put() { MSYS_NO_PATHCONV=1 aws ssm put-parameter --profile g26work --region us-east-2 --type SecureString \
           --overwrite --name "/flakehunter/demo/$1" --value "$2" --query Version --output text; }
 put DATABASE_URL "$POOLED_DATABASE_URL"
 put API_TOKEN "$API_TOKEN"
@@ -291,7 +291,7 @@ rejects it with "Parameter name must be a fully qualified name". It is not neede
 To see what was stored (names only, nothing decrypted):
 
 ```bash
-MSYS_NO_PATHCONV=1 aws ssm get-parameters-by-path --path /flakehunter/demo/ --profile flakehunter \
+MSYS_NO_PATHCONV=1 aws ssm get-parameters-by-path --path /flakehunter/demo/ --profile g26work \
   --region us-east-2 --query "Parameters[].Name"
 ```
 
@@ -307,7 +307,7 @@ in Secrets Manager (CloudFormation resolves it at deploy time; it never appears 
 1. GitHub, Settings, Developer settings, Personal access tokens (classic), with the `repo` and `admin:repo_hook`
    scopes. Check Amplify's current documentation for the scopes it asks for, since they have changed before.
 2. ```bash
-   aws secretsmanager create-secret --profile flakehunter --region us-east-2 \
+   aws secretsmanager create-secret --profile g26work --region us-east-2 \
      --name flakehunter/github-token --secret-string "$GITHUB_TOKEN"
    ```
 
@@ -316,7 +316,7 @@ Skip this step to create the Amplify app unconnected and attach the repository i
 ## 5. Bootstrap CDK (once per account and Region)
 
 ```bash
-bun run --cwd infra cdk bootstrap --profile flakehunter aws://<account-id>/us-east-2
+bun run --cwd infra cdk bootstrap --profile g26work aws://<account-id>/us-east-2
 ```
 
 This creates the staging bucket and roles CDK uses. Use the account id from `sts get-caller-identity`.
@@ -333,8 +333,8 @@ every later deploy sees the same context (a deploy without `alertEmail` would de
 Then look before you leap:
 
 ```bash
-bun run --cwd infra cdk diff FlakeHunterApi --profile flakehunter
-bun run --cwd infra cdk deploy FlakeHunterApi --profile flakehunter
+bun run --cwd infra cdk diff FlakeHunterApi --profile g26work
+bun run --cwd infra cdk deploy FlakeHunterApi --profile g26work
 ```
 
 Add `-c reservedConcurrency=N` if step 0 showed room (10 suits the default throttle). If you skipped it, add it later by
@@ -356,13 +356,13 @@ If it returns a 500, read the function's log; "Could not load secrets from SSM" 
 The stack gives the log group a generated name (it is not `/aws/lambda/<FunctionName>`), so ask the function for it:
 
 ```bash
-aws lambda get-function-configuration --profile flakehunter --region us-east-2 --function-name <FunctionName output> --query LoggingConfig.LogGroup --output text
+aws lambda get-function-configuration --profile g26work --region us-east-2 --function-name <FunctionName output> --query LoggingConfig.LogGroup --output text
 ```
 
 Then read the last 15 minutes, using that name as `<log group>`:
 
 ```bash
-aws logs tail --profile flakehunter --region us-east-2 <log group> --since 15m
+aws logs tail --profile g26work --region us-east-2 <log group> --since 15m
 ```
 
 ## 7. Seed the demo history
@@ -378,7 +378,7 @@ already present.
 ## 8. Deploy the dashboard
 
 ```bash
-bun run --cwd infra cdk deploy FlakeHunterWeb --profile flakehunter \
+bun run --cwd infra cdk deploy FlakeHunterWeb --profile g26work \
   --parameters FlakeHunterWeb:ApiToken="$API_TOKEN" \
   --parameters FlakeHunterWeb:SitePassword='choose-a-password-of-8-or-more-characters' \
   -c repository=https://github.com/<owner>/<repo> -c githubTokenSecretName=flakehunter/github-token
@@ -388,7 +388,7 @@ Add the two `-c` flags to `~/.cdk.json` too. The site password is what visitors 
 refuses to serve at all without one. The first build normally starts by itself; if the Amplify console shows none:
 
 ```bash
-aws amplify start-job --profile flakehunter --region us-east-2 --job-type RELEASE \
+aws amplify start-job --profile g26work --region us-east-2 --job-type RELEASE \
   --app-id <AmplifyAppId output> --branch-name main
 ```
 
@@ -414,6 +414,67 @@ curl -s -u any:the-password "$SITE_URL/" | grep -o 'v[0-9][^<]*'
 
 If only `v0.0.2` shows, with no commit, Amplify did not provide `AWS_COMMIT_ID` to the build. The dashboard still works;
 the commit is just not shown. Bump the version in `apps/web/package.json` when you release.
+
+## Custom domain
+
+The dashboard is served on `flakehunter.g26work.com`. The stack creates that Amplify domain association from
+`customDomain` in `infra/cdk.json`'s context. It is in `cdk.json`, not a `-c` flag, because a deploy without it
+deletes the association. `g26work.com` and `www` belong to the project page
+([glennmcd/g26work-site](https://github.com/glennmcd/g26work-site)), a separate Amplify app in the same project.
+
+**The cutover from the shared domain (one-off, kept for reference).** The dashboard used to serve `g26work.com`,
+`www.g26work.com` and `flakehunter.g26work.com`. An Amplify domain belongs to one app, and the domain name cannot
+change in place, so the move took two FlakeHunter deploys with the site's deploy between them:
+
+1. **Release the domain.** With `customDomain` unset, `cdk diff FlakeHunterWeb` shows
+   `[-] AWS::Amplify::Domain Domain orphan`. "Orphan" because `cdk import` gave the resource `DeletionPolicy: Retain`:
+   the deploy (as in step 8) only removes it from the stack and leaves the association on the app. Delete it yourself
+   right after the deploy:
+
+   ```bash
+   aws amplify delete-domain-association --profile g26work --region us-east-2 --app-id <AmplifyAppId output> --domain-name g26work.com
+   aws amplify list-domain-associations --profile g26work --region us-east-2 --app-id <AmplifyAppId output> --query "domainAssociations[].domainName"
+   ```
+
+   The second command must answer `[]` before you go on. The dashboard stays on its `amplifyapp.com` URL;
+   `flakehunter.g26work.com` is down until step 3.
+2. **Deploy the site.** g26work-site's `docs/deployment.md` creates `g26work.com` and `www` on its own app.
+3. **Take the subdomain (this state).** `customDomain` is `{ "domainName": "flakehunter.g26work.com", "subDomains": [""] }`,
+   so `cdk diff FlakeHunterWeb` shows `[+] AWS::Amplify::Domain Domain`. Deploy as in step 8, then watch it reach
+   `AVAILABLE` (15 to 30 minutes; Amplify writes the DNS record and issues the certificate):
+
+   ```bash
+   aws amplify get-domain-association --profile g26work --region us-east-2 --app-id <AmplifyAppId output> --domain-name flakehunter.g26work.com --query domainAssociation.domainStatus --output text
+   ```
+
+Do not collapse steps 1 and 3 into one deploy: CloudFormation would create the new association while the old one
+still claims `flakehunter`, and the deploy fails.
+
+- **Where things live.** The domain is registered in the management account (Route 53 Domains), whose guardrail-free
+  role can renew it; the project's guardrails do not allow `route53domains`. Its name servers point at the hosted zone
+  in the g26work project. Amplify writes DNS records only into a zone in its own account, so the zone must stay
+  there: Amplify then updates the records itself when it changes the CloudFront target.
+- **Amplify manages the certificate.** The stack sets no certificate, so Amplify issues and renews one.
+- **Changing subdomains.** Edit `subDomains` in `infra/cdk.json` (`""` is the domain itself) and run the step 8 deploy.
+  `cdk diff FlakeHunterWeb` shows the change first.
+
+**Bringing a console-made association into the stack (one-off).** The association was first made in the console, so
+the stack must adopt it before its first deploy with `customDomain`, or CloudFormation tries to create a second one and
+fails. `cdk import` adopts it without touching it; the site stays up. It reuses the stack's current `ApiToken` and
+`SitePassword` values, so it takes no `--parameters`. Run it with the same `-c` context as your deploys (the
+`~/.cdk.json` from step 8): it refuses if anything other than the new `Domain` differs from the deployed template.
+
+```bash
+bun run --cwd infra cdk diff FlakeHunterWeb --profile g26work     # only "[+] AWS::Amplify::Domain Domain"
+bun run --cwd infra cdk import FlakeHunterWeb --profile g26work \
+  --resource-mapping-inline '{"Domain":{"Arn":"arn:aws:amplify:us-east-2:<account>:apps/<app-id>/domains/g26work.com"}}'
+bun run --cwd infra cdk diff FlakeHunterWeb --profile g26work     # no differences
+```
+
+The ARN is `domainAssociationArn` from
+`aws amplify get-domain-association --profile g26work --region us-east-2 --app-id <app-id> --domain-name g26work.com`.
+If the import is refused, nothing has changed; fix what the error names and run it again. A fresh stack with no
+console association needs none of this: the step 8 deploy creates the association.
 
 ## Deploying from a new clone or repository
 
@@ -455,11 +516,11 @@ bun run synth:infra
 
 ### B. Update the API stack
 
-Sign in again if the session expired (`aws login --region us-east-2 --profile flakehunter`), then see what would
+Sign in again if the session expired (`aws login --region us-east-2 --profile g26work`), then see what would
 change:
 
 ```bash
-bun run --cwd infra cdk diff --profile flakehunter
+bun run --cwd infra cdk diff --profile g26work
 ```
 
 Read it before you deploy anything:
@@ -477,7 +538,7 @@ Read it before you deploy anything:
 If the `FlakeHunterApi` part of the diff is empty, there is nothing to deploy. Otherwise:
 
 ```bash
-bun run --cwd infra cdk deploy FlakeHunterApi --profile flakehunter
+bun run --cwd infra cdk deploy FlakeHunterApi --profile g26work
 ```
 
 Then repeat the checks at the end of step 6 (`/health`, a 401 without the token, the demo repository with it). If an
@@ -508,14 +569,14 @@ with `repo` and `admin:repo_hook` covers every repository you own, but a fine-gr
 repositories and needs the new one added. Then:
 
 ```bash
-bun run --cwd infra cdk destroy FlakeHunterWeb --profile flakehunter
+bun run --cwd infra cdk destroy FlakeHunterWeb --profile g26work
 ```
 
 Deploy it again with the command from step 8 (the same two `--parameters`, and `-c repository=` set to the new
 repository's URL, which is already in `~/.cdk.json` if you added the `-c` flags there):
 
 ```bash
-bun run --cwd infra cdk deploy FlakeHunterWeb --profile flakehunter \
+bun run --cwd infra cdk deploy FlakeHunterWeb --profile g26work \
   --parameters FlakeHunterWeb:ApiToken="$API_TOKEN" \
   --parameters FlakeHunterWeb:SitePassword='<the site password>' \
   -c repository=https://github.com/<owner>/<repo> -c githubTokenSecretName=flakehunter/github-token
@@ -529,7 +590,7 @@ Verify, as in step 8, and confirm the webhook now exists on the new repository (
 starts a build:
 
 ```bash
-aws amplify list-jobs --profile flakehunter --region us-east-2 --app-id <AmplifyAppId output> --branch-name main --max-results 3
+aws amplify list-jobs --profile g26work --region us-east-2 --app-id <AmplifyAppId output> --branch-name main --max-results 3
 ```
 
 Last, look at the old repository's webhooks and delete any Amplify one that is left:
@@ -551,13 +612,13 @@ which re-read the secrets (any configuration change does this). First look up th
 `FunctionName` output of the `FlakeHunterApi` stack:
 
 ```bash
-aws cloudformation describe-stacks --profile flakehunter --region us-east-2 --stack-name FlakeHunterApi --query "Stacks[0].Outputs[?OutputKey=='FunctionName'].OutputValue" --output text
+aws cloudformation describe-stacks --profile g26work --region us-east-2 --stack-name FlakeHunterApi --query "Stacks[0].Outputs[?OutputKey=='FunctionName'].OutputValue" --output text
 ```
 
 Then use it as `<FunctionName output>`:
 
 ```bash
-aws lambda update-function-configuration --profile flakehunter --region us-east-2 \
+aws lambda update-function-configuration --profile g26work --region us-east-2 \
   --function-name <FunctionName output> --description "secrets rotated $(date -u +%FT%TZ)"
 ```
 
@@ -578,7 +639,7 @@ back; write a new migration instead.
 the default branch, which would copy your development data into the public demo), then run steps 2 and 7 again (the old upload
 token is gone with the data, so mint a new one and update `DEMO_UPLOAD_TOKEN`).
 
-**Tear down.** `bun run --cwd infra cdk destroy FlakeHunterWeb FlakeHunterApi --profile flakehunter`, then delete what
+**Tear down.** `bun run --cwd infra cdk destroy FlakeHunterWeb FlakeHunterApi --profile g26work`, then delete what
 the stacks never owned: the four parameters under `/flakehunter/demo/`, the `flakehunter/github-token` secret, and
 the Neon branch. The budget is removed with the stack.
 
@@ -662,19 +723,19 @@ then restore it when it is over. First look up the function name, which is the `
 `FlakeHunterApi` stack:
 
 ```bash
-aws cloudformation describe-stacks --profile flakehunter --region us-east-2 --stack-name FlakeHunterApi --query "Stacks[0].Outputs[?OutputKey=='FunctionName'].OutputValue" --output text
+aws cloudformation describe-stacks --profile g26work --region us-east-2 --stack-name FlakeHunterApi --query "Stacks[0].Outputs[?OutputKey=='FunctionName'].OutputValue" --output text
 ```
 
 Then use it as `<FunctionName output>`. Stop the API:
 
 ```bash
-aws lambda put-function-concurrency --profile flakehunter --region us-east-2 --function-name <FunctionName output> --reserved-concurrent-executions 0
+aws lambda put-function-concurrency --profile g26work --region us-east-2 --function-name <FunctionName output> --reserved-concurrent-executions 0
 ```
 
 Restore it when the flood is over:
 
 ```bash
-aws lambda delete-function-concurrency --profile flakehunter --region us-east-2 --function-name <FunctionName output>
+aws lambda delete-function-concurrency --profile g26work --region us-east-2 --function-name <FunctionName output>
 ```
 
 (The delete command restores normal unreserved behaviour. Setting the concurrency to 0 can fail on accounts whose
@@ -703,6 +764,7 @@ settings, never in a browser.
 | CDK context | `reservedConcurrency` | optional Lambda concurrency cap |
 | CDK context | `throttleRate`, `throttleBurst` | API requests per second and burst (defaults 10 and 20); the hard cap on flood cost |
 | CDK context | `repository`, `githubTokenSecretName`, `branch` | the GitHub source for Amplify |
+| CDK context (`infra/cdk.json`) | `customDomain` | the dashboard's custom domain and subdomain prefixes; committed so no deploy drops it |
 | Your shell | `DEMO_UPLOAD_TOKEN` | upload token for the demo repository, used by the seed script only |
 | Lambda (set by CDK) | `UPLOAD_RATE_LIMIT_MAX`, `UPLOAD_RATE_LIMIT_WINDOW_SECONDS`, `RATE_LIMIT_TABLE` | not secret |
 
@@ -721,6 +783,8 @@ settings, never in a browser.
 | Amplify build compiles, then fails "do not have the required package(s) installed" (typescript) | The install skipped the repo root, where TypeScript lives. The build spec must run a full `bun install --frozen-lockfile --linker hoisted`, not a `--filter` one. |
 | Amplify build succeeds, then fails "The 'node_modules' folder is missing the 'next' dependency" | Bun's default linker keeps packages in a symlinked store, so `next` is not at the top of `node_modules`. The Amplify install needs `--linker hoisted` (as AWS requires of pnpm workspaces). |
 | `bun run --cwd infra cdk ...` fails "Cannot find module '...\infra\node_modules\aws-cdk\bin\cdk'" | The dependencies are not installed, typical in a fresh clone (`node_modules` is git-ignored). Run `bun install --frozen-lockfile` at the repository root, then retry. |
+| Amplify custom domain fails "[AmplifyWaitTimeout] ... couldn't find the correct CNAME records" | The domain's name servers point at a hosted zone other than the one Amplify wrote to (for example one in the management account). Compare `nslookup -type=NS g26work.com 1.1.1.1` with the project zone's name servers, point the registration at the project zone (`aws route53domains update-domain-nameservers`), then remove and re-add the domain: a failed certificate check is not retried. See "Custom domain". |
+| `cdk deploy FlakeHunterWeb` fails creating `Domain` because the domain is already associated | The association was made outside the stack. Import it first; see "Custom domain". |
 | First request is slow | Cold start; expected after idle periods. |
 | Pushes to the new GitHub repository do not start an Amplify build | The webhook is still on the old repository, and `cdk diff` shows nothing because the URL is the same. See "Deploying from a new clone or repository", section C: recreate `FlakeHunterWeb`. |
 | `cdk deploy` fails "A budget or resource with the same name but a different internalId already exists" | An older version gave the budget a fixed name, so replacing it collided with itself. The stack is left in `UPDATE_ROLLBACK_COMPLETE`, which is fine: update to the current code (the budget has no fixed name now) and deploy again. The old budget is removed and a new one with a generated name replaces it. |

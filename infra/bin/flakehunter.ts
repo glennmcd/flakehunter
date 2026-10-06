@@ -38,6 +38,11 @@ const api = new ApiStack(app, "FlakeHunterApi", {
   throttle,
 });
 
+// The dashboard's custom domain lives in cdk.json's context, so every deploy carries it (a deploy without it would
+// delete the domain association). A -c override arrives as a JSON string.
+const rawDomain = app.node.tryGetContext("customDomain");
+const customDomain = typeof rawDomain === "string" ? JSON.parse(rawDomain) : rawDomain;
+
 // The dashboard on Amplify Hosting. Deploy with the two secrets it needs and, to build from GitHub, the repository:
 //   cdk deploy FlakeHunterWeb --parameters FlakeHunterWeb:ApiToken=... --parameters FlakeHunterWeb:SitePassword=... \
 //     -c repository=https://github.com/<owner>/<repo> -c githubTokenSecretName=<secrets manager secret>
@@ -48,4 +53,5 @@ new WebStack(app, "FlakeHunterWeb", {
   repository: app.node.tryGetContext("repository"),
   githubTokenSecretName: app.node.tryGetContext("githubTokenSecretName"),
   branch: app.node.tryGetContext("branch"),
+  customDomain,
 });

@@ -1,6 +1,37 @@
 import { Annotations, CfnOutput, CfnParameter, SecretValue, Stack, type StackProps, Tags } from "aws-cdk-lib";
-import { CfnApp, CfnBranch } from "aws-cdk-lib/aws-amplify";
+import { CfnApp, CfnBranch, CfnDomain } from "aws-cdk-lib/aws-amplify";
 import type { Construct } from "constructs";
+
+/**
+ * A custom domain served by the branch. Amplify issues and renews the certificate and, when the domain's Route 53
+ * hosted zone is in this account, writes the DNS records itself; with the zone elsewhere it times out waiting for them.
+ */
+export interface CustomDomain {
+  /** The registered domain, for example example.com. */
+  domainName: string;
+  /** Prefixes to serve: "" is the domain itself, "www" serves www.<domainName>. */
+  subDomains: string[];
+}
+
+const DOMAIN_NAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+const SUBDOMAIN_PREFIX = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
+
+function checkCustomDomain({ domainName, subDomains }: CustomDomain): void {
+  if (!DOMAIN_NAME.test(domainName)) {
+    throw new Error(`customDomain.domainName must be a lowercase domain such as example.com: got "${domainName}"`);
+  }
+  if (!Array.isArray(subDomains) || subDomains.length === 0) {
+    throw new Error('customDomain.subDomains must list at least one prefix ("" for the domain itself)');
+  }
+  for (const prefix of subDomains) {
+    if (prefix !== "" && !SUBDOMAIN_PREFIX.test(prefix)) {
+      throw new Error(`customDomain.subDomains has an invalid prefix: "${prefix}"`);
+    }
+  }
+  if (new Set(subDomains).size !== subDomains.length) {
+    throw new Error("customDomain.subDomains lists a prefix twice");
+  }
+}
 
 export interface WebStackProps extends StackProps {
   /** The API's base URL (the HTTP API endpoint); becomes the dashboard's API_BASE_URL. */
@@ -15,6 +46,11 @@ export interface WebStackProps extends StackProps {
   githubTokenSecretName?: string;
   /** Branch to build and serve. */
   branch?: string;
+  /**
+   * Serve the branch on a custom domain as well. Removing it from a later deploy deletes the domain association, so
+   * keep it in cdk.json rather than passing it per deploy.
+   */
+  customDomain?: CustomDomain;
 }
 
 /**
@@ -63,6 +99,7 @@ export class WebStack extends Stack {
     super(scope, id, props);
 
     const branchName = props.branch ?? "main";
+    if (props.customDomain) checkCustomDomain(props.customDomain);
     Tags.of(this).add("project", "flakehunter");
 
     // Passed at deploy time (cdk deploy --parameters), never written to the template or committed.
@@ -100,13 +137,26 @@ export class WebStack extends Stack {
       ],
     });
 
-    new CfnBranch(this, "Branch", {
+    const branch = new CfnBranch(this, "Branch", {
       appId: this.app.attrAppId,
       branchName,
       stage: "PRODUCTION",
       framework: "Next.js - SSR",
       enableAutoBuild: connected,
     });
+
+    if (props.customDomain) {
+      // The logical id "Domain" is what the one-off `cdk import` of a console-made association maps to
+      // (docs/deployment.md, "Custom domain"). Without a certificate setting Amplify manages the certificate.
+      const domain = new CfnDomain(this, "Domain", {
+        appId: this.app.attrAppId,
+        domainName: props.customDomain.domainName,
+        enableAutoSubDomain: false,
+        subDomainSettings: props.customDomain.subDomains.map((prefix) => ({ prefix, branchName })),
+      });
+      // The branch name is a plain string, so CloudFormation would not otherwise wait for the branch to exist.
+      domain.addResourceDependency(branch);
+    }
 
     if (!connected) {
       Annotations.of(this).addWarningV2(
