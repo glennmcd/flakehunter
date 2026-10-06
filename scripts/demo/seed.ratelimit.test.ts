@@ -44,7 +44,9 @@ describe("seeding against an API with a small upload rate limit", () => {
         };
       };
 
-      const runs = generateDemoRuns({ seed: DEFAULT_DEMO_SEED, days: 3, now: new Date() });
+      // A fixed Thursday, not the clock: a 3-day window ending on a Monday is mostly weekend, when the generator makes
+      // almost no commits, so the test failed early in the week.
+      const runs = generateDemoRuns({ seed: DEFAULT_DEMO_SEED, days: 3, now: new Date("2026-10-01T15:00:00.000Z") });
       const totalReports = runs.reduce((sum, run) => sum + run.reports.length, 0);
       expect(totalReports).toBeGreaterThan(8);
 
