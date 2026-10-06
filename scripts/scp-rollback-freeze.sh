@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Undoes a budget freeze in two steps:
-#   1. detaches the FlakeHunterBudgetFreeze SCP from the flakehunter account   (management account credentials)
+#   1. detaches the FlakeHunterBudgetFreeze SCP from the g26work account       (management account credentials)
 #   2. removes the API function's reserved concurrency of 0, set by the budget kill switch, so it runs again
-#                                                                               (flakehunter account credentials)
+#                                                                               (g26work account credentials)
 #
-#   aws login --profile flakehunter-mgmt
-#   aws login --profile flakehunter
+#   aws login --profile g26work-mgmt
+#   aws login --profile g26work
 #   bash scripts/scp-rollback-freeze.sh --dry-run        # read-only checks in both accounts, then prints the plan
 #   bash scripts/scp-rollback-freeze.sh                  # asks before changing anything
 #   bash scripts/scp-rollback-freeze.sh --scp-only       # only lift the SCP (needs no flakehunter sign-in)

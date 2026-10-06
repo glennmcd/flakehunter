@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Creates (or updates) the FlakeHunterGuardrails SCP from infra/scp/flakehunter-guardrails.json and attaches it to the
-# flakehunter account. Run it with credentials for the MANAGEMENT account:
+# g26work account. Run it with credentials for the MANAGEMENT account:
 #
-#   aws login --profile flakehunter-mgmt
+#   aws login --profile g26work-mgmt
 #   bash scripts/scp-apply-guardrails.sh --dry-run     # read-only checks, then prints the plan
 #   bash scripts/scp-apply-guardrails.sh               # asks before changing anything
 #   bash scripts/scp-apply-guardrails.sh --yes         # no question (for scripts)

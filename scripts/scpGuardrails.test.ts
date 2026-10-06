@@ -17,7 +17,7 @@ const policyFile = readFileSync(path.join(import.meta.dir, "../infra/scp/flakehu
 
 /**
  * A fake `aws` first on PATH. It logs every call on one line and answers from FAKE_* variables:
- * FAKE_ACCOUNT (the management account) and FAKE_APP_ACCOUNT (the flakehunter account, for profile "flakehunter"),
+ * FAKE_ACCOUNT (the management account) and FAKE_APP_ACCOUNT (the g26work account, for profile "g26work"),
  * FAKE_POLICY_ID (id of an existing policy, default none), FAKE_ATTACHED (ids attached to the target, space
  * separated), FAKE_CURRENT (the policy text AWS holds), FAKE_FUNCTION (the stack's FunctionName output),
  * FAKE_CONCURRENCY (the function's reserved concurrency, "None" when unset) and FAKE_FAIL (a "<service> <command>"
@@ -34,8 +34,8 @@ function setup() {
     '[ "$1" = "--region" ] && shift 2',
     'if [ "$1 $2" = "$FAKE_FAIL" ]; then echo "fake failure" >&2; exit 254; fi',
     'case "$1 $2" in',
-    // The flakehunter profile is the application account; any other profile is the management account.
-    '  "sts get-caller-identity") if [ "$PROFILE" = flakehunter ]; then echo "$FAKE_APP_ACCOUNT"; else echo "$FAKE_ACCOUNT"; fi ;;',
+    // The g26work profile is the application account; any other profile is the management account.
+    '  "sts get-caller-identity") if [ "$PROFILE" = g26work ]; then echo "$FAKE_APP_ACCOUNT"; else echo "$FAKE_ACCOUNT"; fi ;;',
     '  "cloudformation describe-stacks") echo "$FAKE_FUNCTION" ;;',
     '  "lambda get-function-concurrency") echo "$FAKE_CONCURRENCY" ;;',
     '  "lambda delete-function-concurrency") ;;',
@@ -91,12 +91,12 @@ function setup() {
 }
 
 describe("scp-apply-guardrails.sh", () => {
-  it("creates the policy from the file and attaches it to the flakehunter account", () => {
+  it("creates the policy from the file and attaches it to the g26work account", () => {
     const { run } = setup();
     const result = run(apply, ["--yes"]);
 
     expect(result.status).toBe(0);
-    expect(result.calls[0]).toBe("--profile flakehunter-mgmt sts get-caller-identity --query Account --output text");
+    expect(result.calls[0]).toBe("--profile g26work-mgmt sts get-caller-identity --query Account --output text");
     const [create, attach] = result.changes;
     expect(create).toContain("organizations create-policy --type SERVICE_CONTROL_POLICY --name FlakeHunterGuardrails");
     expect(create).toContain('"Sid": "DenyOutsideUsEast2"'); // the policy text from infra/scp, passed as --content
@@ -218,7 +218,7 @@ describe("scp-apply-guardrails.sh", () => {
     const result = run(apply, ["--yes"], { FAKE_FAIL: "sts get-caller-identity" });
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("aws login --profile flakehunter-mgmt");
+    expect(result.stderr).toContain("aws login --profile g26work-mgmt");
     expect(result.changes).toEqual([]);
   });
 
@@ -374,10 +374,10 @@ describe("scp-rollback-freeze.sh", () => {
     expect(result.status).toBe(0);
     expect(result.changes).toHaveLength(2);
     expect(result.changes[0]).toBe(
-      "--profile flakehunter-mgmt organizations detach-policy --policy-id p-freeze --target-id 222222222222",
+      "--profile g26work-mgmt organizations detach-policy --policy-id p-freeze --target-id 222222222222",
     );
     expect(result.changes[1]).toBe(
-      "--profile flakehunter --region us-east-2 lambda delete-function-concurrency --function-name api-fn-123",
+      "--profile g26work --region us-east-2 lambda delete-function-concurrency --function-name api-fn-123",
     );
     // It looked up the freeze policy by name, and the function by the stack's output.
     expect(result.calls.some((c) => c.includes("Name=='FlakeHunterBudgetFreeze'"))).toBe(true);
@@ -416,14 +416,14 @@ describe("scp-rollback-freeze.sh", () => {
     expect(result.stdout).toContain("Nothing to roll back.");
   });
 
-  it("--scp-only never touches the flakehunter account", () => {
+  it("--scp-only never touches the g26work account", () => {
     const { run } = setup();
     const result = run(freezeRollback, ["--yes", "--scp-only"], frozen);
 
     expect(result.status).toBe(0);
     expect(result.changes).toHaveLength(1);
     expect(result.changes[0]).toContain("detach-policy");
-    expect(result.calls.some((c) => c.startsWith("--profile flakehunter --region"))).toBe(false);
+    expect(result.calls.some((c) => c.startsWith("--profile g26work --region"))).toBe(false);
   });
 
   it("--concurrency-only never touches the management account", () => {
@@ -433,7 +433,7 @@ describe("scp-rollback-freeze.sh", () => {
     expect(result.status).toBe(0);
     expect(result.changes).toHaveLength(1);
     expect(result.changes[0]).toContain("delete-function-concurrency");
-    expect(result.calls.some((c) => c.startsWith("--profile flakehunter-mgmt"))).toBe(false);
+    expect(result.calls.some((c) => c.startsWith("--profile g26work-mgmt"))).toBe(false);
   });
 
   it("rejects both scope flags together, and unknown arguments, before calling AWS", () => {
@@ -447,13 +447,13 @@ describe("scp-rollback-freeze.sh", () => {
     expect(unknown.stderr).toContain("unknown argument: --force");
   });
 
-  it("changes nothing in either account when the flakehunter profile is the wrong account", () => {
+  it("changes nothing in either account when the g26work profile is the wrong account", () => {
     const { run } = setup();
     // The SCP part would go ahead on its own, but every check runs before any change.
     const result = run(freezeRollback, ["--yes"], { ...frozen, FAKE_APP_ACCOUNT: "999999999999" });
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("not the flakehunter account 222222222222");
+    expect(result.stderr).toContain("not the g26work account 222222222222");
     expect(result.changes).toEqual([]);
   });
 
@@ -544,14 +544,14 @@ describe("required account ids", () => {
     });
   }
 
-  it("the freeze rollback checks the flakehunter account against FH_SCP_TARGET_ID unless FH_APP_ACCOUNT_ID is set", () => {
+  it("the freeze rollback checks the g26work account against FH_SCP_TARGET_ID unless FH_APP_ACCOUNT_ID is set", () => {
     const { run } = setup();
     const frozen = { FAKE_POLICY_ID: "p-freeze", FAKE_ATTACHED: "p-freeze", FAKE_CONCURRENCY: "0" };
 
     // The default is the target account, so a profile in a different account is refused...
     const wrong = run(freezeRollback, ["--yes"], { ...frozen, FAKE_APP_ACCOUNT: "333333333333" });
     expect(wrong.status).toBe(1);
-    expect(wrong.stderr).toContain("not the flakehunter account 222222222222");
+    expect(wrong.stderr).toContain("not the g26work account 222222222222");
     expect(wrong.changes).toEqual([]);
 
     // ...and FH_APP_ACCOUNT_ID overrides it.

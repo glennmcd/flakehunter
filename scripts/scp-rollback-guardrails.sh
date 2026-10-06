@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Detaches the FlakeHunterGuardrails SCP from the flakehunter account, which lifts its restrictions. Run it with
+# Detaches the FlakeHunterGuardrails SCP from the g26work account, which lifts its restrictions. Run it with
 # credentials for the MANAGEMENT account:
 #
-#   aws login --profile flakehunter-mgmt
+#   aws login --profile g26work-mgmt
 #   bash scripts/scp-rollback-guardrails.sh --dry-run    # read-only checks, then prints the plan
 #   bash scripts/scp-rollback-guardrails.sh              # asks before changing anything
 #   bash scripts/scp-rollback-guardrails.sh --delete     # also deletes the policy afterwards

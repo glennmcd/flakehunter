@@ -5,24 +5,24 @@
 #
 # Two AWS account ids are REQUIRED. They are not stored in this repository; export them before running a script:
 #   export FH_MGMT_ACCOUNT_ID=<management-account-id>    the management account, checked before anything changes
-#   export FH_SCP_TARGET_ID=<flakehunter-account-id>     the account the policy is attached to
+#   export FH_SCP_TARGET_ID=<g26work-account-id>         the account the policy is attached to
 # Each must be 12 digits. A script stops with a message naming the variable if one is missing or malformed.
 #
 # Everything else has a default that an environment variable overrides:
-#   FH_MGMT_PROFILE     AWS CLI profile of the management account   (default: flakehunter-mgmt)
+#   FH_MGMT_PROFILE     AWS CLI profile of the management account   (default: g26work-mgmt)
 #   FH_MGMT_REGION      Region to pass to the CLI; unset uses the profile's own (Organizations is global, us-east-1)
 #   FH_SCP_NAME         the policy's name                          (default: FlakeHunterGuardrails)
 #   FH_SCP_FILE         the policy document            (default: infra/scp/flakehunter-guardrails.json in this repo)
 
-FH_MGMT_PROFILE=${FH_MGMT_PROFILE:-flakehunter-mgmt}
+FH_MGMT_PROFILE=${FH_MGMT_PROFILE:-g26work-mgmt}
 FH_SCP_NAME=${FH_SCP_NAME:-FlakeHunterGuardrails}
 FH_SCP_FILE=${FH_SCP_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/infra/scp/flakehunter-guardrails.json}
-# Only scp-rollback-freeze.sh also touches the flakehunter account itself (the API function's concurrency):
-#   FH_APP_PROFILE      AWS CLI profile of the flakehunter account  (default: flakehunter)
+# Only scp-rollback-freeze.sh also touches the g26work account itself (the API function's concurrency):
+#   FH_APP_PROFILE      AWS CLI profile of the g26work account      (default: g26work)
 #   FH_APP_REGION       Region of the stack                         (default: us-east-2)
-#   FH_APP_ACCOUNT_ID   the flakehunter account id, checked first   (default: FH_SCP_TARGET_ID, the same account)
+#   FH_APP_ACCOUNT_ID   the g26work account id, checked first       (default: FH_SCP_TARGET_ID, the same account)
 #   FH_STACK_NAME       the API stack whose FunctionName output names the function (default: FlakeHunterApi)
-FH_APP_PROFILE=${FH_APP_PROFILE:-flakehunter}
+FH_APP_PROFILE=${FH_APP_PROFILE:-g26work}
 FH_APP_REGION=${FH_APP_REGION:-us-east-2}
 FH_STACK_NAME=${FH_STACK_NAME:-FlakeHunterApi}
 FH_SCP_LIMIT=5 # AWS allows at most 5 SCPs attached directly to one account
@@ -35,12 +35,12 @@ fh_die() {
 }
 
 # Stops unless the account ids are given, as 12 digits. They come from the environment, never from this repository.
-# Call it before anything talks to AWS. FH_APP_ACCOUNT_ID, the flakehunter account, defaults to FH_SCP_TARGET_ID.
+# Call it before anything talks to AWS. FH_APP_ACCOUNT_ID, the g26work account, defaults to FH_SCP_TARGET_ID.
 fh_require_config() {
   [ -n "${FH_MGMT_ACCOUNT_ID:-}" ] ||
     fh_die "FH_MGMT_ACCOUNT_ID is not set. Set it to the management account's id: export FH_MGMT_ACCOUNT_ID=<12-digit account id>"
   [ -n "${FH_SCP_TARGET_ID:-}" ] ||
-    fh_die "FH_SCP_TARGET_ID is not set. Set it to the flakehunter account's id: export FH_SCP_TARGET_ID=<12-digit account id>"
+    fh_die "FH_SCP_TARGET_ID is not set. Set it to the g26work account's id: export FH_SCP_TARGET_ID=<12-digit account id>"
   FH_APP_ACCOUNT_ID=${FH_APP_ACCOUNT_ID:-$FH_SCP_TARGET_ID}
 
   local name
@@ -54,7 +54,7 @@ fh_aws() {
   aws --profile "$FH_MGMT_PROFILE" ${FH_MGMT_REGION:+--region "$FH_MGMT_REGION"} "$@" | tr -d '\r'
 }
 
-# The aws CLI against the flakehunter account.
+# The aws CLI against the g26work account.
 fh_aws_app() {
   aws --profile "$FH_APP_PROFILE" --region "$FH_APP_REGION" "$@" | tr -d '\r'
 }
@@ -68,7 +68,7 @@ fh_run() {
   fi
 }
 
-# The same as fh_run, for a change in the flakehunter account.
+# The same as fh_run, for a change in the g26work account.
 fh_run_app() {
   if [ "$FH_DRY_RUN" = 1 ]; then
     echo "[dry-run] would run: aws $1 $2"
@@ -94,7 +94,7 @@ fh_require_aws() {
 }
 
 # Refuses to go on unless the credentials belong to the management account, so a mistake in the profile cannot send
-# these calls to the flakehunter account, where Organizations calls fail or, worse, target something else.
+# these calls to the g26work account, where Organizations calls fail or, worse, target something else.
 fh_check_management_account() {
   local account
   account=$(fh_aws sts get-caller-identity --query Account --output text) ||
@@ -103,13 +103,13 @@ fh_check_management_account() {
     fh_die "profile $FH_MGMT_PROFILE is account $account, not the management account $FH_MGMT_ACCOUNT_ID; nothing was changed"
 }
 
-# The same check for the flakehunter account, before anything is changed there.
+# The same check for the g26work account, before anything is changed there.
 fh_check_app_account() {
   local account
   account=$(fh_aws_app sts get-caller-identity --query Account --output text) ||
     fh_die "could not get the caller identity (signed in? try: aws login --profile $FH_APP_PROFILE)"
   [ "$account" = "$FH_APP_ACCOUNT_ID" ] ||
-    fh_die "profile $FH_APP_PROFILE is account $account, not the flakehunter account $FH_APP_ACCOUNT_ID; nothing was changed"
+    fh_die "profile $FH_APP_PROFILE is account $account, not the g26work account $FH_APP_ACCOUNT_ID; nothing was changed"
 }
 
 # The id of the policy named FH_SCP_NAME, or nothing if it does not exist.

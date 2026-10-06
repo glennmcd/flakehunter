@@ -6,10 +6,10 @@
 #
 # It reads the SecureString parameter <prefix><NAME> (default /flakehunter/demo/API_TOKEN), decrypts it and exports
 # it as NAME. Nothing is printed on success, and the value never appears in an error message. You must be signed in
-# first (see docs/deployment.md: `aws login --region us-east-2 --profile flakehunter`).
+# first (see docs/deployment.md: `aws login --region us-east-2 --profile g26work`).
 #
 # Override the defaults with environment variables:
-#   FH_AWS_PROFILE  AWS CLI profile            (default: flakehunter)
+#   FH_AWS_PROFILE  AWS CLI profile            (default: g26work)
 #   FH_AWS_REGION   Region of the parameters   (default: us-east-2, the project's Region)
 #   FH_SSM_PREFIX   parameter path prefix      (default: /flakehunter/demo/, must start and end with /)
 #
@@ -49,9 +49,9 @@ _fh_load_aws_secret() {
     MSYS_NO_PATHCONV=1 aws ssm get-parameter \
       --name "$_fh_prefix$_fh_name" --with-decryption \
       --query Parameter.Value --output text \
-      --profile "${FH_AWS_PROFILE:-flakehunter}" --region "${FH_AWS_REGION:-us-east-2}"
+      --profile "${FH_AWS_PROFILE:-g26work}" --region "${FH_AWS_REGION:-us-east-2}"
   ); then
-    echo "load-aws-secret: could not read $_fh_prefix$_fh_name (signed in? try: aws login --profile ${FH_AWS_PROFILE:-flakehunter})" >&2
+    echo "load-aws-secret: could not read $_fh_prefix$_fh_name (signed in? try: aws login --profile ${FH_AWS_PROFILE:-g26work})" >&2
     return 1
   fi
   if [ -z "$_fh_value" ] || [ "$_fh_value" = "None" ]; then
