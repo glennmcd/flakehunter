@@ -155,21 +155,53 @@ describe("parseJunitXml", () => {
       expect(testCase?.failureStack).toBe(`expected a < b && c > d "e'\n`.repeat(300).trim());
     });
 
-    it("rejects a report that declares a DOCTYPE, the only way to define custom entities", () => {
+    // The parser reads a DOCTYPE wherever one appears outside CDATA, comments and processing instructions, and applies
+    // its entities to everything after it, so each placement is tried.
+    const doctype = (entities: string) => `<!DOCTYPE a [${entities}]>`;
+    const placements = (entities: string) => ({
+      "before the root": `${doctype(entities)}<testsuite name="S"><testcase classname="c" name="&e;" /></testsuite>`,
+      "inside the root": `<testsuites>${doctype(entities)}<testsuite name="S"><testcase classname="c" name="&e;" /></testsuite></testsuites>`,
+      "after stray text": `x${doctype(entities)}<testsuite name="S"><testcase classname="c" name="&e;" /></testsuite>`,
+    });
+
+    it("refuses an entity longer than one character, wherever the DOCTYPE is", () => {
+      for (const [where, xml] of Object.entries(placements(`<!ENTITY e "${"A".repeat(1000)}">`))) {
+        expect(() => parseJunitXml(xml), where).toThrow(/exceeds maximum allowed/);
+      }
+    });
+
+    it("refuses a second entity, wherever the DOCTYPE is", () => {
+      for (const [where, xml] of Object.entries(placements(`<!ENTITY e "x"><!ENTITY f "y">`))) {
+        expect(() => parseJunitXml(xml), where).toThrow(/exceeds maximum allowed/);
+      }
+    });
+
+    it("refuses the classic billion laughs declaration", () => {
       const billionLaughs = `<?xml version="1.0"?>
         <!DOCTYPE lolz [<!ENTITY lol "lol"><!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">]>
         <testsuite name="S"><testcase classname="c" name="&lol2;" /></testsuite>`;
-      expect(() => parseJunitXml(billionLaughs)).toThrow(/DOCTYPE/);
+      expect(() => parseJunitXml(billionLaughs)).toThrow(/exceeds maximum allowed/);
     });
 
-    it("finds the DOCTYPE after a BOM, an XML declaration, comments and processing instructions, in any case", () => {
-      const xml = `﻿<?xml version="1.0"?>\n<!-- generated -->\n<?pi x?>\n<!doctype testsuite>\n<testsuite name="S" />`;
-      expect(() => parseJunitXml(xml)).toThrow(/DOCTYPE/);
+    it("lets through at most one one-character entity, which can only shorten text", () => {
+      for (const [where, xml] of Object.entries(placements(`<!ENTITY e "$">`))) {
+        expect(parseJunitXml(xml)[0]?.testCases[0]?.name, where).toBe("$");
+      }
     });
 
-    it("still parses a DOCTYPE that is only text inside the report, such as captured HTML in CDATA", () => {
-      const xml = `<testsuite name="S"><testcase classname="c" name="t"><failure message="m"><![CDATA[<!DOCTYPE html><html></html>]]></failure></testcase></testsuite>`;
-      expect(parseJunitXml(xml)[0]?.testCases[0]?.failureStack).toBe("<!DOCTYPE html><html></html>");
+    it("parses captured HTML or XML inside CDATA as text, even after an XML declaration", () => {
+      const captured = `got <?xml version="1.0"?>\n<!DOCTYPE html><html></html>`;
+      for (const prolog of ["", `<?xml version="1.0"?>\n<!-- generated -->\n`]) {
+        const xml = `${prolog}<testsuite name="S"><testcase classname="c" name="t"><failure message="m"><![CDATA[${captured}]]></failure></testcase></testsuite>`;
+        expect(parseJunitXml(xml)[0]?.testCases[0]?.failureStack).toBe(captured);
+      }
+    });
+
+    it("parses many processing instructions and comments before the root in linear time", () => {
+      const start = performance.now();
+      const suites = parseJunitXml(`${"<?a?><!---->".repeat(50)}<testsuite name="S" />`);
+      expect(suites[0]?.suiteName).toBe("S");
+      expect(performance.now() - start).toBeLessThan(100);
     });
   });
 });

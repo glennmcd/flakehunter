@@ -141,7 +141,8 @@ describe("ingestReport", () => {
     const { db, close } = await createTestDb();
     try {
       const repo = await seedRepo(db);
-      const withDoctype = `<!DOCTYPE x [<!ENTITY e "x">]><testsuite name="S"><testcase classname="c" name="&e;" /></testsuite>`;
+      // An entity longer than one character, which the parser refuses (see junitParser.ts).
+      const withDoctype = `<!DOCTYPE x [<!ENTITY e "xx">]><testsuite name="S"><testcase classname="c" name="&e;" /></testsuite>`;
       for (const xml of [
         "",
         "not xml at all",

@@ -24,8 +24,8 @@ afterAll(() => {
 });
 
 /** A GitHub client serving one artifact; `calls` records each request's method and owner/repo. */
-function fakeGithub() {
-  const zip = zipSync({ "junit.xml": strToU8(JUNIT) });
+function fakeGithub(junit = JUNIT) {
+  const zip = zipSync({ "junit.xml": strToU8(junit) });
   const calls: string[] = [];
   const client = {
     rest: {
@@ -200,6 +200,24 @@ describe("POST /webhooks/github workflow_run", () => {
       const [event] = await t.events();
       expect(event?.processingError).toBe("processing failed; see the API logs");
       expect(event?.processedAt).toBeNull();
+    } finally {
+      await t.app.close();
+      await t.close();
+    }
+  });
+
+  it("stores nothing, and only fixed text, when the artifact's report declares entities", async () => {
+    const bomb = `<testsuites><!DOCTYPE a [<!ENTITY e "${"A".repeat(1000)}">]><testsuite name="S"><testcase classname="c" name="&e;"/></testsuite></testsuites>`;
+    const t = await setup(fakeGithub(bomb));
+    try {
+      const res = await t.deliver(workflowRunEvent());
+
+      expect(res.statusCode).toBe(200);
+      expect(await t.results()).toBe(0);
+      const { rows } = await t.db.execute(sql`select count(*)::int as n from reports`);
+      expect((rows[0] as { n: number }).n).toBe(0);
+      const [event] = await t.events();
+      expect(event?.processingError).toBe("processing failed; see the API logs");
     } finally {
       await t.app.close();
       await t.close();

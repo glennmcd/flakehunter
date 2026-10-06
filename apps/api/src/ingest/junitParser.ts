@@ -21,21 +21,22 @@ export interface ParsedSuite {
   testCases: ParsedTestCase[];
 }
 
-/**
- * A DOCTYPE in the prolog: anything before the root element is a BOM, whitespace, the XML declaration, comments or
- * processing instructions. A DOCTYPE is the only way to declare custom entities (the "billion laughs" attack), and
- * JUnit reports never need one, so such reports are refused. A DOCTYPE later in the document is only text, for
- * example captured HTML inside CDATA, and is left alone.
- */
-const PROLOG_DOCTYPE = /^﻿?\s*(?:(?:<\?[\s\S]*?\?>|<!--[\s\S]*?-->)\s*)*<!DOCTYPE/i;
-
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
   parseAttributeValue: true,
-  // With DOCTYPEs refused, only the five standard escapes (&lt; &amp; ...) remain, and they only shorten text. The parser's default caps every document at 1000 expansions of any kind, which a long stack trace
-  // full of &lt; and &gt; exceeds, so that cap is lifted.
-  processEntities: { enabled: true, maxTotalExpansions: Number.POSITIVE_INFINITY },
+  // Reports are untrusted. The parser reads a DOCTYPE wherever one appears outside CDATA, comments and processing
+  // instructions, and its entities are the "billion laughs" attack. The DOCTYPE reader enforces these limits itself, so
+  // a DOCTYPE with more than one entity, or an entity longer than one character, fails the parse wherever it sits.
+  // What gets through can only shorten text ("&e;" becomes one character), as do the standard escapes (&lt; &amp; ...).
+  // So the default cap of 1000 expansions per document, which a long stack trace full of &lt; and &gt; exceeds and
+  // which was the only check run before expanding, can be lifted. junitParser.test.ts covers each limit.
+  processEntities: {
+    enabled: true,
+    maxEntityCount: 1,
+    maxEntitySize: 1,
+    maxTotalExpansions: Number.POSITIVE_INFINITY,
+  },
   // The callback is also called for attributes. A suite's `skipped="2"` count shares its name with the <skipped>
   // element, so without the isAttribute check it would be wrapped in an array and read back as undefined.
   isArray: (tagName, _jPath, _isLeafNode, isAttribute) =>
@@ -106,9 +107,6 @@ function parseTestCase(node: RawNode): ParsedTestCase {
 }
 
 export function parseJunitXml(xml: string, fileName?: string): ParsedSuite[] {
-  if (PROLOG_DOCTYPE.test(xml)) {
-    throw new Error("JUnit reports with a DOCTYPE are not accepted");
-  }
   const parsed = parser.parse(xml) as RawNode;
   const suiteNodes: RawNode[] = [];
   collectSuiteNodes(parsed, suiteNodes);
