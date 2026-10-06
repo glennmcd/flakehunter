@@ -144,4 +144,64 @@ describe("parseJunitXml", () => {
       ]);
     });
   });
+
+  describe("entities and DOCTYPE", () => {
+    it("decodes more than 1000 standard escapes, as long stack traces have", () => {
+      const stack = "expected a &lt; b &amp;&amp; c &gt; d &quot;e&apos;\n".repeat(300);
+      const xml = `<testsuite name="S"><testcase classname="c" name="t"><failure message="&lt;boom&gt;">${stack}</failure></testcase></testsuite>`;
+
+      const testCase = parseJunitXml(xml)[0]?.testCases[0];
+      expect(testCase?.failureMessage).toBe("<boom>");
+      expect(testCase?.failureStack).toBe(`expected a < b && c > d "e'\n`.repeat(300).trim());
+    });
+
+    // The parser reads a DOCTYPE wherever one appears outside CDATA, comments and processing instructions, and applies
+    // its entities to everything after it, so each placement is tried.
+    const doctype = (entities: string) => `<!DOCTYPE a [${entities}]>`;
+    const placements = (entities: string) => ({
+      "before the root": `${doctype(entities)}<testsuite name="S"><testcase classname="c" name="&e;" /></testsuite>`,
+      "inside the root": `<testsuites>${doctype(entities)}<testsuite name="S"><testcase classname="c" name="&e;" /></testsuite></testsuites>`,
+      "after stray text": `x${doctype(entities)}<testsuite name="S"><testcase classname="c" name="&e;" /></testsuite>`,
+    });
+
+    it("refuses an entity longer than one character, wherever the DOCTYPE is", () => {
+      for (const [where, xml] of Object.entries(placements(`<!ENTITY e "${"A".repeat(1000)}">`))) {
+        expect(() => parseJunitXml(xml), where).toThrow(/exceeds maximum allowed/);
+      }
+    });
+
+    it("refuses a second entity, wherever the DOCTYPE is", () => {
+      for (const [where, xml] of Object.entries(placements(`<!ENTITY e "x"><!ENTITY f "y">`))) {
+        expect(() => parseJunitXml(xml), where).toThrow(/exceeds maximum allowed/);
+      }
+    });
+
+    it("refuses the classic billion laughs declaration", () => {
+      const billionLaughs = `<?xml version="1.0"?>
+        <!DOCTYPE lolz [<!ENTITY lol "lol"><!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">]>
+        <testsuite name="S"><testcase classname="c" name="&lol2;" /></testsuite>`;
+      expect(() => parseJunitXml(billionLaughs)).toThrow(/exceeds maximum allowed/);
+    });
+
+    it("lets through at most one one-character entity, which can only shorten text", () => {
+      for (const [where, xml] of Object.entries(placements(`<!ENTITY e "$">`))) {
+        expect(parseJunitXml(xml)[0]?.testCases[0]?.name, where).toBe("$");
+      }
+    });
+
+    it("parses captured HTML or XML inside CDATA as text, even after an XML declaration", () => {
+      const captured = `got <?xml version="1.0"?>\n<!DOCTYPE html><html></html>`;
+      for (const prolog of ["", `<?xml version="1.0"?>\n<!-- generated -->\n`]) {
+        const xml = `${prolog}<testsuite name="S"><testcase classname="c" name="t"><failure message="m"><![CDATA[${captured}]]></failure></testcase></testsuite>`;
+        expect(parseJunitXml(xml)[0]?.testCases[0]?.failureStack).toBe(captured);
+      }
+    });
+
+    it("parses many processing instructions and comments before the root in linear time", () => {
+      const start = performance.now();
+      const suites = parseJunitXml(`${"<?a?><!---->".repeat(50)}<testsuite name="S" />`);
+      expect(suites[0]?.suiteName).toBe("S");
+      expect(performance.now() - start).toBeLessThan(100);
+    });
+  });
 });

@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { type ApiStackProps, DEFAULT_THROTTLE, SECRET_NAMES } from "../lib/api-stack.js";
+import { ENV_SAFE_SECRET_PATTERN } from "../lib/web-stack.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const infraRoot = path.join(here, "..");
@@ -351,6 +352,34 @@ describe("WebStack Amplify app", () => {
     const { template } = scenario("webConnected");
     template.hasParameter("ApiToken", { Type: "String", NoEcho: true });
     template.hasParameter("SitePassword", { Type: "String", NoEcho: true, MinLength: 8 });
+  });
+
+  it("only accepts secrets that survive the trip through .env.production unchanged", () => {
+    const { template } = scenario("webConnected");
+    for (const name of ["ApiToken", "SitePassword"]) {
+      template.hasParameter(name, { AllowedPattern: ENV_SAFE_SECRET_PATTERN, ConstraintDescription: Match.anyValue() });
+    }
+    const allowed = new RegExp(ENV_SAFE_SECRET_PATTERN);
+    // Next loads .env.production with dotenv and dotenv-expand: an unquoted value is cut at "#", "$NAME" is replaced
+    // by another variable, and quotes, backslashes and whitespace change how the line is read.
+    for (const bad of [
+      "pass#word1",
+      "pa$HOME12",
+      "pa$" + "{X}word",
+      'pass"word',
+      "pass'word",
+      "pass\\word",
+      "pass word",
+      "pass`word",
+      "pass\nword",
+      "",
+    ]) {
+      expect(allowed.test(bad)).toBe(false);
+    }
+    // A token from `openssl rand -hex 32`, a typical strong password, and every allowed punctuation mark.
+    for (const good of ["0123456789abcdef".repeat(4), "Tr0ub4dor!3", "x-y_z.~+/=@%^*,:?!"]) {
+      expect(allowed.test(good)).toBe(true);
+    }
   });
 
   it("never exposes a variable with the NEXT_PUBLIC_ prefix, which would put it in the browser bundle", () => {

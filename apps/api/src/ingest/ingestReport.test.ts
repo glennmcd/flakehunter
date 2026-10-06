@@ -141,7 +141,15 @@ describe("ingestReport", () => {
     const { db, close } = await createTestDb();
     try {
       const repo = await seedRepo(db);
-      for (const xml of ["", "not xml at all", "<html><body>hi</body></html>", "<testsuites></testsuites>"]) {
+      // An entity longer than one character, which the parser refuses (see junitParser.ts).
+      const withDoctype = `<!DOCTYPE x [<!ENTITY e "xx">]><testsuite name="S"><testcase classname="c" name="&e;" /></testsuite>`;
+      for (const xml of [
+        "",
+        "not xml at all",
+        "<html><body>hi</body></html>",
+        "<testsuites></testsuites>",
+        withDoctype,
+      ]) {
         await expectApiError(ingestReport(db, { repoId: repo.id, ...base, xml }), "invalid_report");
       }
       expect(await count(db, "workflow_runs")).toBe(0);
