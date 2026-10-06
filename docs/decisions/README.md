@@ -12,6 +12,7 @@ they came from are in [../plans/](../plans/README.md).
 | [0005](0005-upload-api-xml-and-headers.md) | Upload API takes raw XML with metadata in headers | 2 |
 | [0006](0006-read-token-and-upload-tokens.md) | One read token, per-repo upload tokens | 2 |
 | [0007](0007-host-on-aws.md) | Host on AWS, keep the database on Neon | 4 |
+| [0008](0008-aws-scp.md) | SCP use in AWS | 4 |
 
 ## Adding one
 

@@ -45,8 +45,8 @@ flowchart BT
   U(["You, in a browser"])
   AI(["AI assistant<br/>via MCP server"])
 
-  GA -- "workflow_run webhook<br/>or POST /api/reports" ---> APIGW
-  GHAPI -- "artifact download" --> L
+  GA -- "POST /api/reports<br/>or workflow_run webhook (optional)" ---> APIGW
+  GHAPI -. "artifact download<br/>(webhook only)" .-> L
   APIGW --> L
   SSM -. "secrets at cold start" .-> L
   DDB <--> L
@@ -109,7 +109,7 @@ A TypeScript monorepo built with Bun:
 
 Security best practices were used including but not limited to:
 
-- Authorization required at all levels and external hooks  
+- Every endpoint except `/health` needs a bearer token or, for the webhook, a valid GitHub signature
 - No secrets in code
 - Data is schema validated and size limited
 - AWS deployment specifies rate limiters, explicit SCP, kill switch, cost protection

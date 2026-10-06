@@ -1,7 +1,8 @@
 # Build plans
 
 FlakeHunter was built in four parts, each planned with Claude Code before any code was written. Each page gives the
-prompt, a short version of the plan and what actually shipped. The plans as approved are in [archive/](archive/).
+prompt, a short version of the plan and what actually shipped. The originals (the plans as approved for Parts 1, 3
+and 4, and the prompt and decision notes for Parts 1 and 2) are in [archive/](archive/).
 
 These build parts are unrelated to the "Part 1/Part 2" sections of [deployment.md](../deployment.md).
 

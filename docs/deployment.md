@@ -276,7 +276,7 @@ The Lambda reads four SecureString parameters under `/flakehunter/demo/` when a 
 stack grants it read access to exactly these four and never creates them, so no secret passes through CloudFormation.
 
 ```bash
-export API_TOKEN="$(openssl rand -hex 32)"            # the dashboard's read token; keep it for step 7
+export API_TOKEN="$(openssl rand -hex 32)"            # the dashboard's read token; keep it for steps 6 and 8
 put() { MSYS_NO_PATHCONV=1 aws ssm put-parameter --profile flakehunter --region us-east-2 --type SecureString \
           --overwrite --name "/flakehunter/demo/$1" --value "$2" --query Version --output text; }
 put DATABASE_URL "$POOLED_DATABASE_URL"
@@ -400,6 +400,7 @@ the build image handles Bun 1.4.2 (it does), and whether Next 16's Node-runtime 
 Verify the `SiteUrl` output:
 
 ```bash
+export SITE_URL='https://main.<app-id>.amplifyapp.com'   # the SiteUrl output
 curl -si "$SITE_URL" | head -3                      # 401 with a WWW-Authenticate: Basic header
 curl -s -u any:the-password "$SITE_URL/repos/1" | head -c 200      # the overview page (find the id with /?list=1)
 ```
@@ -629,8 +630,9 @@ second continuously for a month (about 26 million requests), API Gateway, Lambda
 $120. The same flood at an earlier default of 50 per second would have cost roughly $370 to $610, so raise the limit
 only if real traffic needs it: `-c throttleRate=N` (steady) and `-c throttleBurst=M` (burst, default twice N) at
 deploy time. A dashboard page view makes two API calls, so 10 per second is about five visitors loading a page in the
-same second; the seed uploads one report at a time and backs off on a 429. The budget alert emails you but does not
-stop spending, and reserved concurrency (step 0) limits how many run at once, not how many are billed. Only a spend
+same second; the seed uploads one report at a time and backs off on a 429. The budget emails you and, at 100% of
+actual spend, stops the API (see "Stopping a flood"), but its data lags by hours, so a flood runs up cost before it
+reacts. Reserved concurrency (step 0) limits how many run at once, not how many are billed. Only a spend
 limit in AWS Settings (billing) is a hard dollar cap; see "Stopping a flood" below.
 
 To redo this with current prices, ask for the AWS Price List entries for Lambda (`AWSLambda`), API Gateway

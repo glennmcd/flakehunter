@@ -19,5 +19,6 @@ CDK in TypeScript, in one Region (us-east-2). Keep Postgres on Neon, using its p
   instances.
 - CDK runs under Node and the Lambda is bundled by the project's own esbuild script, because both are slow or broken
   under Bun on Windows.
-- Cost is bounded by API Gateway throttling, a budget that stops the API at 100%, and organization guardrails (SCPs).
+- Cost is bounded by API Gateway throttling, a budget that stops the API at 100% (created only when `alertEmail` is
+  passed at deploy), and organization guardrails (SCPs, [0008](0008-aws-scp.md)).
 - Deploying is manual, from the runbook in [deployment.md](../deployment.md).

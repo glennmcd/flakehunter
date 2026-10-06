@@ -43,3 +43,9 @@ uploads and rate limiting (Part 4), and `GET /api/tests/:id/failures` for the MC
 - [0002: Flaky means a pass and a fail on the same commit](../decisions/0002-flaky-on-same-commit.md) (flake rate)
 - [0005: Upload API takes raw XML with metadata in headers](../decisions/0005-upload-api-xml-and-headers.md)
 - [0006: One read token, per-repo upload tokens](../decisions/0006-read-token-and-upload-tokens.md)
+
+## Full plan
+
+Only the prompt was kept for this part, not a full plan. The originals are the prompt,
+[archive/part-2-plan.md](archive/part-2-plan.md), and the questions and answers,
+[archive/part-2-decisions.md](archive/part-2-decisions.md).

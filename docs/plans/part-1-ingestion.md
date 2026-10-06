@@ -6,7 +6,7 @@ Ingest JUnit XML from GitHub Actions through a webhook, store it in Postgres and
 
 > I'm building FlakeHunter: it ingests JUnit XML test reports from GitHub Actions, stores them in Postgres, and flags
 > a test as flaky when it both passes and fails on the same commit. Stack: TypeScript end to end: a Node API
-> Fastify), React dashboard and Postgres. Before writing any code, ask me questions about requirements and edge
+> Fastify) [sic], React dashboard and Postgres. Before writing any code, ask me questions about requirements and edge
 > cases, then propose the data model, the folder structure and a [Part 1] task list.
 
 ## Plan
@@ -43,4 +43,5 @@ caller since Part 3's dashboard uses the Part 2 API.
 
 ## Full plan
 
-[archive/part-1-plan.md](archive/part-1-plan.md), as approved.
+[archive/part-1-plan.md](archive/part-1-plan.md), as approved, and the original decision notes,
+[archive/part-1-decisions.md](archive/part-1-decisions.md).

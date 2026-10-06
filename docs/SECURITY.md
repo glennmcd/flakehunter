@@ -50,7 +50,8 @@ FlakeHunter's riskiest job is processing what CI sends it, so all of it is treat
   dynamic reference.
 - **Errors never leak secrets.** Environment-variable errors name the variable, never its value. API errors share one
   fixed format. Raw error text goes only to the logs; the dashboard and `webhook_events.processing_error` get fixed
-  text. The MCP server never passes stack traces, URLs or tokens to the model.
+  text. The MCP server's error results carry only the API's error code and message, and anything unexpected
+  becomes fixed text; no stack traces or tokens reach the model.
 - **Git history was cleaned before publishing.** Account ids and personal email addresses were rewritten out of
   history, and account ids now come from environment variables.
 
@@ -60,8 +61,8 @@ FlakeHunter's riskiest job is processing what CI sends it, so all of it is treat
 - **Organization guardrails (SCPs)** in [`infra/scp/`](../infra/scp/README.md): a Region lock, an allow-list of the
   services FlakeHunter uses, a block on multi-Region features and on long-lived IAM credentials (IAM users and access
   keys), and protection for the budget kill switch.
-- **Cost protection.** A $30 monthly budget sends alerts, and at 100% sets the API's concurrency to 0, which refuses
-  every request. A separate freeze SCP that blocks new resources and deploys is attached once you approve it. The
+- **Cost protection.** A $30 monthly budget (created when `alertEmail` is passed at deploy) sends alerts, and at
+  100% sets the API's concurrency to 0, which refuses every request. A separate freeze SCP that blocks new resources and deploys is attached once you approve it. The
   policies are validated with IAM Access Analyzer, and the apply and rollback scripts are tested against a fake `aws`.
 
 ### Engineering process
