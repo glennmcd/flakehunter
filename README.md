@@ -2,7 +2,7 @@
 
 **Find the flaky tests in your GitHub Actions CI: any test that both passes and fails on the same commit.**
 
-**[Live demo](https://main.dcr99cldvce5a.amplifyapp.com/)** (password protected; [open an issue](https://github.com/glennmcd/flakehunter/issues) to
+**[Live demo](https://flakehunter.g26work.com/)** (password protected; [open an issue](https://github.com/glennmcd/flakehunter/issues) to
 ask for access)
 
 **The dashboard:** a repo's flakiest tests, then one test's pass/fail history.
