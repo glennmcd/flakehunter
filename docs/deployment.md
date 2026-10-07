@@ -641,6 +641,30 @@ back; write a new migration instead.
 the default branch, which would copy your development data into the public demo), then run steps 2 and 7 again (the old upload
 token is gone with the data, so mint a new one and update `DEMO_UPLOAD_TOKEN`).
 
+**See who is logging in.** The dashboard writes one JSON line for each login to its server output (`apps/web/src/lib/accessLog.ts`),
+which Amplify sends to CloudWatch Logs. A failed login (credentials sent and refused) is logged for any request; a successful one
+is logged once per page load, not for scripts, images or background fetches. The browser's first request, which gets the
+password prompt, logs nothing. A line looks like this (the password, the username and the Authorization header are never logged):
+
+```json
+{"event":"site_login","outcome":"failure","method":"GET","path":"/repos/3","forwardedFor":"203.0.113.9","viewerAddress":"203.0.113.9:51234","country":"US","userAgent":"Mozilla/5.0 ..."}
+```
+
+`forwardedFor` is the whole `X-Forwarded-For` chain: a client can write the start of it, so trust the last entry
+(added by CloudFront), not the first. `viewerAddress` and `country` appear only if Amplify passes CloudFront's headers on.
+Find the log group the dashboard writes to, then search it for failures:
+
+```bash
+MSYS_NO_PATHCONV=1 aws logs describe-log-groups --profile g26work --region us-east-2 --log-group-name-prefix /aws/amplify --query "logGroups[].logGroupName"
+```
+
+```bash
+MSYS_NO_PATHCONV=1 aws logs filter-log-events --profile g26work --region us-east-2 --log-group-name <log group> --filter-pattern '"site_login" "failure"' --start-time $(( ($(date +%s) - 3600) * 1000 ))
+```
+
+Drop `"failure"` from the pattern to see successes too. Repeated failures from one address are someone guessing the password.
+The log lines show up only after the dashboard has been redeployed from a build that includes this change.
+
 **Tear down.** `bun run --cwd infra cdk destroy FlakeHunterWeb FlakeHunterApi --profile g26work`, then delete what
 the stacks never owned: the four parameters under `/flakehunter/demo/`, the `flakehunter/github-token` secret, and
 the Neon branch. The budget is removed with the stack.

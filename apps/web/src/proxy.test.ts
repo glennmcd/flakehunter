@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { NextRequest } from "next/server";
 import { proxy } from "./proxy";
 
@@ -19,16 +19,29 @@ function configure(settings: { SITE_PASSWORD?: string; NODE_ENV: string }) {
   env.NODE_ENV = settings.NODE_ENV;
 }
 
-function request(url = "http://localhost:3000/", credentials?: string) {
-  const headers = new Headers();
+function request(url = "http://localhost:3000/", credentials?: string, extraHeaders: Record<string, string> = {}) {
+  const headers = new Headers(extraHeaders);
   if (credentials !== undefined) headers.set("authorization", `Basic ${Buffer.from(credentials).toString("base64")}`);
   return new NextRequest(url, { headers });
+}
+
+/** Runs the proxy while capturing what it writes to the console, split into info and warning lines. */
+async function withLogs(req: NextRequest) {
+  const info = spyOn(console, "log").mockImplementation(() => {});
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const response = await proxy(req);
+    return { response, info: info.mock.calls.map((c) => String(c[0])), warn: warn.mock.calls.map((c) => String(c[0])) };
+  } finally {
+    info.mockRestore();
+    warn.mockRestore();
+  }
 }
 
 describe("proxy (site password gate)", () => {
   it("lets a request with the right password through", async () => {
     configure({ SITE_PASSWORD: "hunter2", NODE_ENV: "production" });
-    const response = await proxy(request("http://localhost:3000/repos/3", "demo:hunter2"));
+    const response = (await withLogs(request("http://localhost:3000/repos/3", "demo:hunter2"))).response;
     expect(response.status).toBe(200);
     // NextResponse.next() marks a pass-through.
     expect(response.headers.get("x-middleware-next")).toBe("1");
@@ -37,7 +50,7 @@ describe("proxy (site password gate)", () => {
   it("challenges a missing or wrong password with 401 and a Basic realm", async () => {
     configure({ SITE_PASSWORD: "hunter2", NODE_ENV: "production" });
     for (const req of [request(), request("http://localhost:3000/", "demo:wrong")]) {
-      const response = await proxy(req);
+      const response = (await withLogs(req)).response;
       expect(response.status).toBe(401);
       expect(response.headers.get("www-authenticate")).toBe('Basic realm="FlakeHunter", charset="UTF-8"');
       expect(response.headers.get("cache-control")).toBe("no-store");
@@ -54,10 +67,69 @@ describe("proxy (site password gate)", () => {
 
   it("never reveals the password in a response", async () => {
     configure({ SITE_PASSWORD: "hunter2", NODE_ENV: "production" });
-    const response = await proxy(request("http://localhost:3000/", "demo:wrong"));
+    const response = (await withLogs(request("http://localhost:3000/", "demo:wrong"))).response;
     const text = await response.text();
     expect(text).not.toContain("hunter2");
     expect(JSON.stringify([...response.headers.entries()])).not.toContain("hunter2");
+  });
+
+  describe("login log", () => {
+    const client = { "x-forwarded-for": "203.0.113.9", "user-agent": "test-agent/1.0" };
+
+    it("logs a successful page login with the client's details", async () => {
+      configure({ SITE_PASSWORD: "hunter2", NODE_ENV: "production" });
+      const { response, info, warn } = await withLogs(request("http://localhost:3000/repos/3", "demo:hunter2", client));
+
+      expect(response.status).toBe(200);
+      expect(warn).toEqual([]);
+      expect(info).toHaveLength(1);
+      expect(JSON.parse(info[0] ?? "")).toMatchObject({
+        event: "site_login",
+        outcome: "success",
+        method: "GET",
+        path: "/repos/3",
+        forwardedFor: "203.0.113.9",
+        userAgent: "test-agent/1.0",
+      });
+    });
+
+    it("logs a failed login as a warning with the client's details, and never the password tried", async () => {
+      configure({ SITE_PASSWORD: "hunter2", NODE_ENV: "production" });
+      const { response, info, warn } = await withLogs(request("http://localhost:3000/", "demo:guess-123", client));
+
+      expect(response.status).toBe(401);
+      expect(info).toEqual([]);
+      expect(warn).toHaveLength(1);
+      expect(JSON.parse(warn[0] ?? "")).toMatchObject({
+        event: "site_login",
+        outcome: "failure",
+        forwardedFor: "203.0.113.9",
+        userAgent: "test-agent/1.0",
+      });
+      for (const secret of ["guess-123", "hunter2", Buffer.from("demo:guess-123").toString("base64")]) {
+        expect(warn[0]).not.toContain(secret);
+      }
+    });
+
+    it("stays quiet for the browser's first request (the password prompt) and for assets", async () => {
+      configure({ SITE_PASSWORD: "hunter2", NODE_ENV: "production" });
+      const prompt = await withLogs(request("http://localhost:3000/", undefined, client));
+      const asset = await withLogs(request("http://localhost:3000/_next/static/chunk.js", "demo:hunter2", client));
+
+      expect(prompt.response.status).toBe(401);
+      expect(asset.response.status).toBe(200);
+      for (const result of [prompt, asset]) {
+        expect(result.info).toEqual([]);
+        expect(result.warn).toEqual([]);
+      }
+    });
+
+    it("logs nothing when the site is open in development", async () => {
+      configure({ NODE_ENV: "development" });
+      const { info, warn } = await withLogs(request("http://localhost:3000/", "demo:anything", client));
+      expect(info).toEqual([]);
+      expect(warn).toEqual([]);
+    });
   });
 
   it("is open without a password in development", async () => {
