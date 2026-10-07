@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { loginOutcome, logLogin } from "./lib/accessLog";
 import { gateDecision } from "./lib/basicAuth";
 
 // Site-wide password gate (Next 16's `proxy`, formerly `middleware`). With no `config.matcher` it runs on every
@@ -11,6 +12,15 @@ export function proxy(request: NextRequest) {
     sitePassword: process.env.SITE_PASSWORD,
     nodeEnv: process.env.NODE_ENV,
   });
+
+  const outcome = loginOutcome({
+    decision,
+    headers: request.headers,
+    pathname: request.nextUrl.pathname,
+    sitePassword: process.env.SITE_PASSWORD,
+  });
+  if (outcome)
+    logLogin(outcome, { method: request.method, pathname: request.nextUrl.pathname, headers: request.headers });
 
   if (decision.allow) return NextResponse.next();
 
