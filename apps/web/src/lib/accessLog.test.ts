@@ -30,17 +30,37 @@ describe("loginOutcome", () => {
     );
   });
 
-  it("does not log a success for assets, the favicon or background fetches", () => {
-    const cases: [string, Record<string, string>][] = [
-      ["/_next/static/chunk.js", {}],
-      ["/favicon.ico", {}],
-      ["/repos/3", { rsc: "1" }],
-      ["/repos/3", { "next-router-prefetch": "1" }],
-    ];
-    for (const [pathname, extra] of cases) {
-      const h = headers({ authorization: "Basic ZGVtbzpodW50ZXIy", ...extra });
-      expect(loginOutcome({ decision: allow, headers: h, pathname, sitePassword: "x" })).toBeNull();
+  const success = (pathname: string, extra: Record<string, string> = {}) =>
+    loginOutcome({
+      decision: allow,
+      headers: headers({ authorization: "Basic ZGVtbzpodW50ZXIy", ...extra }),
+      pathname,
+      sitePassword: "x",
+    });
+
+  it("does not log a success for framework assets or the favicon", () => {
+    expect(success("/_next/static/chunk.js", { "sec-fetch-dest": "document" })).toBeNull();
+    expect(success("/favicon.ico")).toBeNull();
+  });
+
+  it("logs a success only when the browser says it is opening a page, not fetching something for one", () => {
+    expect(success("/repos/3", { "sec-fetch-dest": "document" })).toBe("success");
+    expect(success("/repos/3", { "sec-fetch-dest": " Document " })).toBe("success");
+    // Next's prefetches and client-side navigations are fetch() calls, which browsers label "empty".
+    for (const dest of ["empty", "script", "style", "image", "font", "iframe", "frame", "worker"]) {
+      expect(success("/repos/3", { "sec-fetch-dest": dest })).toBeNull();
     }
+  });
+
+  it("counts a request without fetch metadata (curl, a script, a proxy that drops it) as a page, so no success is missed", () => {
+    expect(success("/repos/3")).toBe("success");
+  });
+
+  it("does not rely on Next's RSC or prefetch headers, which Next removes before proxy.ts runs", () => {
+    // In production the proxy never sees these; if it did, they must not hide a page load that the browser labels a document.
+    expect(success("/repos/3", { rsc: "1", "next-router-prefetch": "1", "sec-fetch-dest": "document" })).toBe(
+      "success",
+    );
   });
 
   it("has no login when the gate is open (no password set), even if a client sends an Authorization header", () => {
@@ -65,6 +85,7 @@ describe("loginLogLine", () => {
       "cloudfront-viewer-address": "203.0.113.9:51234",
       "cloudfront-viewer-country": "US",
       "user-agent": "Mozilla/5.0 (X11; Linux x86_64)",
+      "sec-fetch-dest": "document",
       authorization: "Basic ZGVtbzpodW50ZXIy",
       cookie: "session=abc",
     }),
@@ -83,6 +104,7 @@ describe("loginLogLine", () => {
       viewerAddress: "203.0.113.9:51234",
       country: "US",
       userAgent: "Mozilla/5.0 (X11; Linux x86_64)",
+      fetchDest: "document",
     });
   });
 

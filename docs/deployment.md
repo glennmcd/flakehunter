@@ -648,16 +648,20 @@ token is gone with the data, so mint a new one and update `DEMO_UPLOAD_TOKEN`).
 
 **See who is logging in.** The dashboard writes one JSON line for each login to its server output (`apps/web/src/lib/accessLog.ts`),
 which Amplify sends to CloudWatch Logs. A failed login (credentials sent and refused) is logged for any request; a successful one
-is logged once per page load, not for scripts, images or background fetches. The browser's first request, which gets the
-password prompt, logs nothing. A line looks like this (the password, the username and the Authorization header are never logged):
+is logged when a page is opened, not for scripts, images or the background fetches Next makes for prefetching and
+navigation (the browser labels those with `Sec-Fetch-Dest`, logged as `fetchDest`; a client that sends no such header,
+such as curl, counts as opening a page). The browser's first request, which gets the password prompt, logs nothing. If
+one visit still writes many success lines, Amplify's CDN is not passing `Sec-Fetch-Dest` through: look at `fetchDest` in the lines. A line looks like this (the password, the username and the Authorization header are never logged):
 
 ```json
-{"event":"site_login","outcome":"failure","method":"GET","path":"/repos/3","forwardedFor":"203.0.113.9","viewerAddress":"203.0.113.9:51234","country":"US","userAgent":"Mozilla/5.0 ..."}
+{"event":"site_login","outcome":"failure","method":"GET","path":"/repos/3","forwardedFor":"203.0.113.9, 64.252.74.213","viewerAddress":"203.0.113.9:51234","country":"US","userAgent":"Mozilla/5.0 ..."}
 ```
 
-`forwardedFor` is the whole `X-Forwarded-For` chain: a client can write the start of it, so trust the last entry
-(added by CloudFront), not the first. `viewerAddress` and `country` appear only if Amplify passes CloudFront's headers on.
-Find the log group the dashboard writes to, then search it for failures:
+**Trust `viewerAddress`** (with `country`): CloudFront sets it itself, and Amplify passes it on. `forwardedFor` is the
+whole `X-Forwarded-For` chain, which a client can start with anything: a test request that sent `X-Forwarded-For: 6.6.6.6`
+was logged as `6.6.6.6, <real address>, <an AWS address>`, while `viewerAddress` still held the real address. So neither the
+first entry (spoofable) nor the last (an AWS hop) is the client. The dashboard's log group is `/aws/amplify/<AmplifyAppId output>`;
+list the groups if you need to find it:
 
 ```bash
 MSYS_NO_PATHCONV=1 aws logs describe-log-groups --profile g26work --region us-east-2 --log-group-name-prefix /aws/amplify --query "logGroups[].logGroupName"

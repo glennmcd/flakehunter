@@ -124,6 +124,30 @@ describe("proxy (site password gate)", () => {
       }
     });
 
+    it("stays quiet for a browser's background fetches (Next prefetches), but still logs a failed one", async () => {
+      configure({ SITE_PASSWORD: "hunter2", NODE_ENV: "production" });
+      const background = { ...client, "sec-fetch-dest": "empty", "sec-fetch-mode": "cors" };
+
+      const ok = await withLogs(request("http://localhost:3000/repos/3", "demo:hunter2", background));
+      expect(ok.response.status).toBe(200);
+      expect(ok.info).toEqual([]);
+      expect(ok.warn).toEqual([]);
+
+      const bad = await withLogs(request("http://localhost:3000/repos/3", "demo:wrong", background));
+      expect(bad.response.status).toBe(401);
+      expect(bad.warn).toHaveLength(1);
+      expect(JSON.parse(bad.warn[0] ?? "")).toMatchObject({ outcome: "failure", fetchDest: "empty" });
+    });
+
+    it("logs a page load once, with what the browser said it was for", async () => {
+      configure({ SITE_PASSWORD: "hunter2", NODE_ENV: "production" });
+      const { info } = await withLogs(
+        request("http://localhost:3000/repos/3", "demo:hunter2", { ...client, "sec-fetch-dest": "document" }),
+      );
+      expect(info).toHaveLength(1);
+      expect(JSON.parse(info[0] ?? "")).toMatchObject({ outcome: "success", fetchDest: "document" });
+    });
+
     it("logs nothing when the site is open in development", async () => {
       configure({ NODE_ENV: "development" });
       const { info, warn } = await withLogs(request("http://localhost:3000/", "demo:anything", client));
