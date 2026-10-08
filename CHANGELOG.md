@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/glennmcd/flakehunter/compare/v0.1.1...v0.2.0) (2026-10-08)
+
+
+### Features
+
+* add script to generate and check OpenAPI documentation ([#12](https://github.com/glennmcd/flakehunter/issues/12)) ([b98db6b](https://github.com/glennmcd/flakehunter/commit/b98db6b882fc3ad7c609cb86f50e81ff94b9f4f1))
+
 ## [0.1.1](https://github.com/glennmcd/flakehunter/compare/v0.1.0...v0.1.1) (2026-10-08)
 
 
