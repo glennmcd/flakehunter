@@ -415,7 +415,7 @@ curl -s -u any:the-password "$SITE_URL/" | grep -o 'v[0-9][^<]*'
 ```
 
 If only `v0.0.2` shows, with no commit, Amplify did not provide `AWS_COMMIT_ID` to the build. The dashboard still works;
-the commit is just not shown. Bump the version in `apps/web/package.json` when you release.
+the commit is just not shown. The version is set by release-please, not by hand: see [releasing.md](releasing.md).
 
 ## Custom domain
 
@@ -456,6 +456,11 @@ still claims `flakehunter`, and the deploy fails.
   role can renew it; the project's guardrails do not allow `route53domains`. Its name servers point at the hosted zone
   in the g26work project. Amplify writes DNS records only into a zone in its own account, so the zone must stay
   there: Amplify then updates the records itself when it changes the CloudFront target.
+- **Finding it in the console.** In the Amplify console (Region us-east-2), open the **flakehunter-web** app, then **Hosting**,
+  then **Custom domains**; `g26work-site` is a different app. The DNS record is in Route 53 under **Hosted zones**, in the
+  `g26work.com` zone (the dashboard is a record inside that zone, not a zone of its own). It does not appear under
+  **Registered domains** in this project (the registration is in the management account), and Amplify's CloudFront
+  distribution is managed by Amplify, so it is not in your CloudFront list.
 - **Amplify manages the certificate.** The stack sets no certificate, so Amplify issues and renews one.
 - **Changing subdomains.** Edit `subDomains` in `infra/cdk.json` (`""` is the domain itself) and run the step 8 deploy.
   `cdk diff FlakeHunterWeb` shows the change first.
@@ -663,7 +668,18 @@ MSYS_NO_PATHCONV=1 aws logs filter-log-events --profile g26work --region us-east
 ```
 
 Drop `"failure"` from the pattern to see successes too. Repeated failures from one address are someone guessing the password.
-The log lines show up only after the dashboard has been redeployed from a build that includes this change.
+
+Amplify writes no server-side logs, and creates no log group, for an app without an IAM service role that it can
+assume (the role needs `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents` and `logs:DescribeLogGroups`).
+The stack creates that role (`ServiceRole` in `infra/lib/web-stack.ts`), so an empty `describe-log-groups` list means the
+stack has not been deployed with it yet. After the step 8 deploy, start a new build so the app picks the role up, then
+load a page:
+
+```bash
+aws amplify start-job --profile g26work --region us-east-2 --app-id <AmplifyAppId output> --branch-name main --job-type RELEASE
+```
+
+The group also shows in the Amplify console under the app's **Monitoring**, then **Hosting compute logs**.
 
 **Tear down.** `bun run --cwd infra cdk destroy FlakeHunterWeb FlakeHunterApi --profile g26work`, then delete what
 the stacks never owned: the four parameters under `/flakehunter/demo/`, the `flakehunter/github-token` secret, and
@@ -806,6 +822,7 @@ settings, never in a browser.
 | Upload returns 413 | Over 11 MB after decompression, or an uncompressed body over about 4.5 MB (Lambda's request limit): send it gzip-compressed. |
 | `cdk deploy` fails "Specified ReservedConcurrentExecutions ... decreases ... UnreservedConcurrentExecution" | Remove `reservedConcurrency`; the account's quota is too small to reserve any (step 0). |
 | Amplify build fails at `bun install` | Check the log for the Bun error; see `BUILD_SPEC` in `infra/lib/web-stack.ts`. |
+| `describe-log-groups --log-group-name-prefix /aws/amplify` returns `[]` | The Amplify app has no service role, so it writes no server logs. Deploy `FlakeHunterWeb` (it creates `ServiceRole`), start a new build, load a page. See "See who is logging in" under Day-two operations. |
 | Amplify build compiles, then fails "do not have the required package(s) installed" (typescript) | The install skipped the repo root, where TypeScript lives. The build spec must run a full `bun install --frozen-lockfile --linker hoisted`, not a `--filter` one. |
 | Amplify build succeeds, then fails "The 'node_modules' folder is missing the 'next' dependency" | Bun's default linker keeps packages in a symlinked store, so `next` is not at the top of `node_modules`. The Amplify install needs `--linker hoisted` (as AWS requires of pnpm workspaces). |
 | `bun run --cwd infra cdk ...` fails "Cannot find module '...\infra\node_modules\aws-cdk\bin\cdk'" | The dependencies are not installed, typical in a fresh clone (`node_modules` is git-ignored). Run `bun install --frozen-lockfile` at the repository root, then retry. |

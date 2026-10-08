@@ -1,5 +1,15 @@
-import { Annotations, CfnOutput, CfnParameter, SecretValue, Stack, type StackProps, Tags } from "aws-cdk-lib";
+import {
+  Annotations,
+  ArnFormat,
+  CfnOutput,
+  CfnParameter,
+  SecretValue,
+  Stack,
+  type StackProps,
+  Tags,
+} from "aws-cdk-lib";
 import { CfnApp, CfnBranch, CfnDomain } from "aws-cdk-lib/aws-amplify";
+import { PolicyStatement, Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
 
 /**
@@ -130,10 +140,39 @@ export class WebStack extends Stack {
       description: "Password for the site-wide Basic auth gate. Production refuses to serve without one.",
     });
 
+    // Amplify delivers the dashboard's server-side output (including the login log) to CloudWatch Logs through this role;
+    // an app without one gets no log group at all. The permissions are the four Amplify documents for SSR logging.
+    // Scoped to /aws/amplify/ log groups; not to this app's own group, because the app's id would make the role and the
+    // app depend on each other. DescribeLogGroups cannot be limited to a group, so it gets the account's log groups.
+    const serviceRole = new Role(this, "ServiceRole", {
+      assumedBy: new ServicePrincipal("amplify.amazonaws.com"),
+      description: "Lets Amplify Hosting write the dashboard's server-side logs to CloudWatch Logs",
+    });
+    const logGroupArn = (resourceName: string) =>
+      this.formatArn({
+        service: "logs",
+        resource: "log-group",
+        resourceName,
+        arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+      });
+    serviceRole.addToPolicy(
+      new PolicyStatement({ actions: ["logs:CreateLogGroup"], resources: [logGroupArn("/aws/amplify/*")] }),
+    );
+    serviceRole.addToPolicy(
+      new PolicyStatement({
+        actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
+        resources: [logGroupArn("/aws/amplify/*:log-stream:*")],
+      }),
+    );
+    serviceRole.addToPolicy(
+      new PolicyStatement({ actions: ["logs:DescribeLogGroups"], resources: [logGroupArn("*")] }),
+    );
+
     const connected = Boolean(props.repository && props.githubTokenSecretName);
     this.app = new CfnApp(this, "WebApp", {
       name: "flakehunter-web",
       platform: "WEB_COMPUTE",
+      iamServiceRole: serviceRole.roleArn,
       buildSpec: BUILD_SPEC,
       ...(connected
         ? {
