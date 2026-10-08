@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/glennmcd/flakehunter/compare/v0.1.0...v0.1.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **web:** log one login per page load and correct the client address … ([#10](https://github.com/glennmcd/flakehunter/issues/10)) ([f97592e](https://github.com/glennmcd/flakehunter/commit/f97592ec16da15367fa5092bb41b75711c9de6ab))
+
 ## [0.1.0](https://github.com/glennmcd/flakehunter/compare/v0.0.2...v0.1.0) (2026-10-08)
 
 
