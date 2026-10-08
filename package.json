@@ -17,10 +17,12 @@
     "lint": "biome ci .",
     "lint:fix": "biome check --write .",
     "typecheck": "tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p packages/mcp-server/tsconfig.json && tsc --noEmit -p infra/tsconfig.json && bun run --cwd apps/web typecheck",
-    "test": "bun --cwd packages/shared-types test && bun --cwd apps/api test && bun --cwd packages/mcp-server test && bun --cwd apps/web test && bun --cwd infra test && bun test scripts",
+    "test": "bun --cwd packages/shared-types test && bun --cwd apps/api test && bun --cwd packages/mcp-server test && bun --cwd apps/web test && bun --cwd infra test && bun test scripts && bun run openapi:check",
     "tunnel": "bun scripts/tunnel.ts",
     "seed:demo": "bun scripts/seed-demo.ts",
-    "synth:infra": "cd infra && node node_modules/aws-cdk/bin/cdk synth --quiet"
+    "synth:infra": "cd infra && node node_modules/aws-cdk/bin/cdk synth --quiet",
+    "openapi:generate": "bun scripts/openapi.ts",
+    "openapi:check": "bun scripts/openapi.ts --check"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

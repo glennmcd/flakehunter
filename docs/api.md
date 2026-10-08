@@ -3,6 +3,9 @@
 How CI sends test reports to FlakeHunter, and the read endpoints the dashboard and the MCP server use. To run the API
 itself, see [deployment.md](deployment.md).
 
+The machine-readable contract is [openapi.json](openapi.json), also served publicly at `/openapi.json`, with a browsable
+page at `/docs`. It is generated from the routes (`bun run openapi:generate`) and CI fails if the committed copy is stale.
+
 The commands below are bash commands, run from the repository root (on Windows, use Git Bash).
 
 ## Uploading reports from CI

@@ -1,6 +1,7 @@
 import { idParamSchema, repoSummaryQuerySchema, repoSummaryResponseSchema } from "@flakehunter/shared-types";
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { errorResponses } from "../../api/errorResponses.js";
 import { resolveRepo } from "../../api/resolveRepo.js";
 import { getRepoSummary } from "../../summary/repoSummaryQueries.js";
 
@@ -11,9 +12,12 @@ const repoSummaryRoute: FastifyPluginAsync = async (fastify) => {
     "/repos/:id/summary",
     {
       schema: {
+        tags: ["repos"],
+        summary: "Summarise a repository",
+        description: "Windowed totals for a repository. lastRunAt ignores the window.",
         params: idParamSchema,
         querystring: repoSummaryQuerySchema,
-        response: { 200: repoSummaryResponseSchema },
+        response: { 200: repoSummaryResponseSchema, ...errorResponses(400, 401, 404) },
       },
     },
     async (request) => {

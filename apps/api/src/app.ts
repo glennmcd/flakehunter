@@ -6,6 +6,7 @@ import authPlugin from "./plugins/auth.js";
 import dbPlugin from "./plugins/db.js";
 import errorHandlerPlugin from "./plugins/errorHandler.js";
 import githubPlugin from "./plugins/github.js";
+import openapiPlugin from "./plugins/openapi.js";
 import rateLimitPlugin, { type RateLimitPluginOptions } from "./plugins/rateLimit.js";
 import { registerRoutes } from "./routes/index.js";
 
@@ -35,6 +36,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await fastify.register(authPlugin);
   await fastify.register(githubPlugin, { client: options.github });
   await fastify.register(rateLimitPlugin, options.rateLimit ?? {});
+  // Before the routes, so swagger sees them as they register.
+  await fastify.register(openapiPlugin);
   await registerRoutes(fastify);
 
   return fastify;
