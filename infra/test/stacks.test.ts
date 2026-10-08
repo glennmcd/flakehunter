@@ -420,6 +420,50 @@ describe("WebStack Amplify app", () => {
     expect(scenario("webConnected").warnings).toEqual([]);
   });
 
+  describe("service role for server-side logs", () => {
+    const statements = () => {
+      const policies = Object.values(scenario("webConnected").template.findResources("AWS::IAM::Policy")) as {
+        Properties: {
+          PolicyDocument: { Statement: { Action: string | string[]; Effect: string; Resource: unknown }[] };
+        };
+      }[];
+      expect(policies).toHaveLength(1);
+      return policies[0]?.Properties.PolicyDocument.Statement ?? [];
+    };
+
+    it("gives the app a role that only Amplify can assume, or Amplify writes no logs at all", () => {
+      const { template } = scenario("webConnected");
+      template.hasResourceProperties("AWS::IAM::Role", {
+        AssumeRolePolicyDocument: {
+          Statement: [{ Action: "sts:AssumeRole", Effect: "Allow", Principal: { Service: "amplify.amazonaws.com" } }],
+        },
+      });
+      template.hasResourceProperties("AWS::Amplify::App", {
+        IAMServiceRole: { "Fn::GetAtt": [Match.stringLikeRegexp("^ServiceRole"), "Arn"] },
+      });
+    });
+
+    it("allows exactly the four CloudWatch Logs actions Amplify documents, and nothing else", () => {
+      const actions = statements().flatMap((s) => (Array.isArray(s.Action) ? s.Action : [s.Action]));
+      expect(actions.sort()).toEqual([
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:DescribeLogGroups",
+        "logs:PutLogEvents",
+      ]);
+      expect(statements().every((s) => s.Effect === "Allow")).toBe(true);
+    });
+
+    it("limits writing to /aws/amplify/ log groups; only listing log groups is wider", () => {
+      for (const statement of statements()) {
+        const resources = JSON.stringify(statement.Resource);
+        const actions = Array.isArray(statement.Action) ? statement.Action : [statement.Action];
+        expect(resources).not.toBe('"*"');
+        if (!actions.includes("logs:DescribeLogGroups")) expect(resources).toContain("log-group:/aws/amplify/*");
+      }
+    });
+  });
+
   it("outputs the app id and the site URL", () => {
     const { template } = scenario("webConnected");
     template.hasOutput("AmplifyAppId", { Value: Match.anyValue() });
