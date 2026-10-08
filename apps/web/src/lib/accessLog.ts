@@ -12,18 +12,25 @@ function clean(value: string | null | undefined): string | undefined {
   return text.length > MAX_FIELD_LENGTH ? `${text.slice(0, MAX_FIELD_LENGTH)}…` : text;
 }
 
-/** Framework assets and background fetches are not someone opening the site, so a success is not logged for them. */
+/**
+ * Whether a request is someone opening a page, as opposed to a file or a background fetch the page made. Next removes
+ * its own markers (the RSC and prefetch headers and the `_rsc` parameter) before `proxy.ts` runs, so they cannot be
+ * used; what a browser always adds is `Sec-Fetch-Dest`: `document` for opening a page, anything else (`empty` for the
+ * fetches Next uses to prefetch and navigate, `script`, `style`, `image`, ...) for requests a page made. Without the
+ * header (curl, a script, or a proxy that dropped it) the request is counted as a page, so a success is never missed.
+ */
 function isPageRequest(pathname: string, headers: Headers): boolean {
   if (pathname.startsWith("/_next/") || pathname === "/favicon.ico") return false;
-  return !headers.has("rsc") && !headers.has("next-router-prefetch");
+  const dest = headers.get("sec-fetch-dest");
+  return dest === null || dest.trim().toLowerCase() === "document";
 }
 
 /**
  * Whether this request is a login worth a log line, and which kind. The site has no login form: the browser sends the
  * password in an Authorization header on every request. So:
  * - a **failure** is any request that sent credentials the gate refused, whatever it was for;
- * - a **success** is a request that sent accepted credentials for a page (not an asset or a prefetch), so each page
- *   load logs once instead of once per file;
+ * - a **success** is a request that sent accepted credentials for a page (not an asset or a background fetch; see
+ *   isPageRequest), so each page load logs once instead of once per file and prefetch;
  * - a request with no credentials is the browser's first request, which the gate answers with the password prompt, and
  *   a gate that is open (development) has no login: neither is logged.
  */
@@ -43,9 +50,9 @@ export function loginOutcome(input: {
  * One JSON line describing who tried to log in. It never contains the Authorization header, the password or the
  * username (a mistyped password can end up in the username box), and it leaves out the query string.
  *
- * Behind CloudFront the real client address is in x-forwarded-for, but the client can write the start of that header
- * itself, so the whole chain is logged rather than picking one entry. CloudFront's own view of the viewer is logged
- * too when Amplify forwards it.
+ * The address to trust is `viewerAddress` (CloudFront-Viewer-Address, which CloudFront sets itself and Amplify passes
+ * on). `forwardedFor` is logged as received because a client can start the x-forwarded-for chain with any address,
+ * and it ends with an AWS hop, so neither its first nor its last entry is the client.
  */
 export function loginLogLine(outcome: LoginOutcome, request: { method: string; pathname: string; headers: Headers }) {
   const { headers } = request;
@@ -58,6 +65,8 @@ export function loginLogLine(outcome: LoginOutcome, request: { method: string; p
     viewerAddress: clean(headers.get("cloudfront-viewer-address")),
     country: clean(headers.get("cloudfront-viewer-country")),
     userAgent: clean(headers.get("user-agent")),
+    // What the browser says the request is for ("document" for a page); absent when the client sends no such header.
+    fetchDest: clean(headers.get("sec-fetch-dest")),
   });
 }
 
