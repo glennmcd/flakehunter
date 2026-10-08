@@ -20,8 +20,8 @@ without a PR to review), Changesets (aimed at publishing npm packages, needs a f
 ## Consequences
 
 - Commit types now drive version numbers, so `feat:` and `fix:` must mean something. Documentation and tooling changes
-  use `docs:`, `chore:` or `ci:`. With merge commits the commits inside a PR count and the merge message is skipped;
-  release-please recommends squash merging, where the PR title is the one commit.
+  use `docs:`, `chore:` or `ci:`. Merge commits make a PR count twice (its own commits, and its title,
+  which GitHub copies into the merge commit body), so PRs are squash-merged: the PR title is the one commit.
 - Versions come in through a reviewable PR, so the owner still makes every merge. The release PR only runs CI when the
   workflow has a fine-grained token (`RELEASE_PLEASE_TOKEN`); that token is a standing credential to renew.
 - A tag does not deploy anything: the API Lambda still changes only by `cdk deploy`, so a release says what is on `main`,
