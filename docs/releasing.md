@@ -31,12 +31,15 @@ The commit **type** does. Choose it for what changes for people who use the depl
 A documentation-only change is `docs:` however large it is, and a one-line bug fix is `fix:`. The existing history has
 commits like `feat(docs): ...` that would each have caused a minor release; use `docs:` for those.
 
-**Squash merging is recommended.** release-please advises it: each PR becomes one commit whose message is the PR title, which
-already follows this format, so the changelog gets one clean line per PR. PRs here have been merged with **merge
-commits**, which also works: release-please reads each commit inside the PR and skips the non-conventional "Merge pull
-request #N" message. The drawback is that a PR with `feat: add x` followed by `fix: typo in x` lists both, although
-the typo never reached `main`. To switch, change **Settings**, **General**, **Pull Requests** on GitHub; with squash merging the PR title is the
-message that counts, so keep it in this format.
+**Use squash merging.** Each PR then becomes one commit on `main` whose message is the PR title, which already follows
+this format, so the changelog gets one clean line per PR. Merge commits (what PRs #1 to #7 used) do not work cleanly:
+GitHub writes the PR title into the body of the merge commit, and release-please reads that as a second commit, so every
+PR is listed **twice**: once for its own commit and once for its title. The first release PR (#8) showed exactly that. The
+PR title also counts on its own, so a `feat:` title on a PR of `docs:` commits would still cause a minor release. To
+switch, go to **Settings**, **General**, **Pull Requests** on GitHub: tick **Allow squash merging**, set its default
+commit message to **Pull request title**, and untick **Allow merge commits** and **Allow rebase merging** (a rebase merge
+keeps each commit's own message, so the PR title would stop being the one that counts). From then on the PR title is the message that
+counts, so keep it in this format.
 
 ## One-time setup (you do this; it changes repository settings and creates a secret)
 
