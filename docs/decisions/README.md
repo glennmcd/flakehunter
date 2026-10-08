@@ -14,6 +14,7 @@ they came from are in [../plans/](../plans/README.md).
 | [0007](0007-host-on-aws.md) | Host on AWS, keep the database on Neon | 4 |
 | [0008](0008-aws-scp.md) | SCP use in AWS | 4 |
 | [0009](0009-release-please-versioning.md) | Automated versions with release-please | 4 |
+| [0010](0010-openapi-published-contract.md) | OpenAPI as the published contract | 4 |
 
 ## Adding one
 

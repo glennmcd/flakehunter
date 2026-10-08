@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { type ApiClient, ApiClientError } from "./apiClient";
-import { createServer } from "./server";
+import { createServer, getTestFailuresInput, listFlakyTestsInput } from "./server";
 
 const item = {
   testId: 1,
@@ -150,5 +151,28 @@ describe("flakehunter MCP server", () => {
         await close();
       }
     });
+  });
+});
+
+describe("tool inputs match the published OpenAPI document", () => {
+  type Param = { name: string; in: string; required?: boolean; schema?: { default?: unknown; maximum?: number } };
+  const spec = JSON.parse(readFileSync(new URL("../../../docs/openapi.json", import.meta.url), "utf8")) as {
+    paths: Record<string, { get: { parameters: Param[] } }>;
+  };
+  const params = (path: string) => spec.paths[path]?.get.parameters ?? [];
+
+  it("list_flaky_tests maps onto the query parameters of GET /api/tests/flaky", () => {
+    const query = params("/api/tests/flaky").filter((p) => p.in === "query");
+    for (const field of Object.keys(listFlakyTestsInput)) {
+      expect(query.map((p) => p.name)).toContain(field);
+    }
+    expect(query.find((p) => p.name === "repo")?.required).toBe(true);
+    expect(query.find((p) => p.name === "minRuns")?.schema?.default).toBe(5);
+    expect(query.find((p) => p.name === "limit")?.schema?.maximum).toBe(200);
+  });
+
+  it("get_test_failures takes the numeric test id that GET /api/tests/{id}/failures takes", () => {
+    expect(Object.keys(getTestFailuresInput)).toEqual(["testId"]);
+    expect(params("/api/tests/{id}/failures").map((p) => `${p.in}:${p.name}`)).toEqual(["path:id"]);
   });
 });

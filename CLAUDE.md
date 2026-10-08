@@ -21,6 +21,7 @@ bun run lint             # Biome: lint, format check, import order (fails on any
 bun run lint:fix         # apply Biome's safe fixes
 bun run typecheck        # tsc --noEmit for api, infra and web (web runs `next typegen` first)
 bun run test             # shared-types, api, web, infra, then scripts tests
+bun run openapi:generate # rewrite docs/openapi.json after changing a route schema (`openapi:check` runs in `test`)
 bun run synth:infra      # bundle the API Lambda and synthesize both CloudFormation stacks (CI runs it; deploys nothing)
 ```
 
@@ -104,6 +105,7 @@ Read endpoints (global `API_TOKEN`), all under `/api`:
 - `GET /api/tests/:id/history` (`history/testHistoryQueries.ts`): newest-first results; never returns `failureStack`.
 - `GET /api/tests/:id/failures` (`history/testFailuresQueries.ts`): the 50 most recent failed/error results for a test, newest first, with run details and no pagination; never returns `failureStack`.
 - `GET /api/repos/:id/summary` (`summary/repoSummaryQueries.ts`): windowed totals; `lastRunAt` ignores the window.
+- **OpenAPI:** `plugins/openapi.ts` publishes the `/api` routes (those with a `tags` entry) at the public `GET /openapi.json` and `/docs`, and `docs/openapi.json` is the committed copy; a new `/api` route needs `tags`, `summary`, `errorResponses(...)` and a regenerated spec. `info.version` is a hand-bumped constant (ADR 0010). `/openapi.json` and `/docs` are in the auth exemption.
 - `GET /api/repos` (`repos/repoQueries.ts`): paginated repo list ordered by full name; the web app needs it to find a repo's numeric id.
 
 ### Demo data

@@ -1,6 +1,7 @@
 import { uploadReportHeadersSchema, uploadReportResponseSchema } from "@flakehunter/shared-types";
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { errorResponses } from "../../api/errorResponses.js";
 import { ApiError } from "../../api/errors.js";
 import { findRepoByToken } from "../../auth/repoToken.js";
 import { gzipPreParsing } from "../../http/gzipBody.js";
@@ -41,8 +42,17 @@ const reportsRoute: FastifyPluginAsync = async (fastify) => {
       // Accepts Content-Encoding: gzip (the decompressed size is capped too); runs after the token check above.
       preParsing: gzipPreParsing(MAX_REPORT_BYTES),
       schema: {
+        tags: ["reports"],
+        summary: "Upload a JUnit XML report",
+        description:
+          "Authenticated with a per-repository upload token (not the read token); the repository comes from the token. Idempotent on (run id, attempt, report key): the first upload returns 201, a repeat returns 200 with the original counts. A SHA that contradicts an existing run is a 400. Unparseable bodies or reports with no testsuite are 422 (invalid_report) and store nothing. Rate limited per IP and per token (429 with Retry-After).",
+        security: [{ uploadToken: [] }],
         headers: uploadReportHeadersSchema,
-        response: { 200: uploadReportResponseSchema, 201: uploadReportResponseSchema },
+        response: {
+          200: uploadReportResponseSchema.describe("Duplicate upload; counts are those of the original."),
+          201: uploadReportResponseSchema.describe("Report stored."),
+          ...errorResponses(400, 401, 413, 422, 429),
+        },
       },
     },
     async (request, reply) => {
