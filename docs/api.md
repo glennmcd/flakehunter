@@ -3,15 +3,17 @@
 How CI sends test reports to FlakeHunter, and the read endpoints the dashboard and the MCP server use. To run the API
 itself, see [deployment.md](deployment.md).
 
-The machine-readable contract is [openapi.json](openapi.json), also served publicly at `/openapi.json`, with a browsable
-page at `/docs`. It is generated from the routes (`bun run openapi:generate`) and CI fails if the committed copy is stale.
+The current API is v2, under `/api/v2`. Its machine-readable contract is [openapi.v2.json](openapi.v2.json), also
+served publicly at `/openapi.v2.json`, with a browsable page at `/docs/v2`. v1, under `/api`, is deprecated (see
+[API v1](#api-v1-deprecated)); its contract is [openapi.json](openapi.json), at `/openapi.json` and `/docs`. Both are
+generated from the routes (`bun run openapi:generate`) and CI fails if either committed copy is stale.
 
 The commands below are bash commands, run from the repository root (on Windows, use Git Bash).
 
 ## Uploading reports from CI
 
 Instead of (or as well as) the webhook, CI can push a JUnit XML report straight to
-`POST /api/reports`. It authenticates with a per-repo upload token, so a leaked CI secret can only
+`POST /api/v2/reports`. It authenticates with a per-repo upload token, so a leaked CI secret can only
 write to its own repo.
 
 Mint a token (printed once; store it as a CI secret, e.g. `FLAKEHUNTER_TOKEN`):
@@ -32,7 +34,7 @@ Upload from a GitHub Actions step, after your tests have written `junit.xml`:
 - name: Upload test report to FlakeHunter
   if: always()
   run: |
-    gzip -c junit.xml | curl --fail-with-body -X POST "$FLAKEHUNTER_URL/api/reports" \
+    gzip -c junit.xml | curl --fail-with-body -X POST "$FLAKEHUNTER_URL/api/v2/reports" \
       -H "Authorization: Bearer $FLAKEHUNTER_TOKEN" \
       -H "Content-Type: application/xml" \
       -H "Content-Encoding: gzip" \
@@ -65,10 +67,23 @@ Branch and workflow names are chosen by whoever pushes or opens the pull request
 | `X-FH-Run-Attempt` | no (1) | A re-run is a new attempt, which is what lets a flake show up on one commit |
 | `X-FH-Branch`, `X-FH-Workflow` | no | Stored on the run |
 | `X-FH-Report-Key` | no (`default`) | Distinguishes several reports for one run (e.g. `unit`, `integration`) |
+| `X-FH-CI-Source` | no (the host's own CI) | Which CI system ran the tests; see below |
 | `X-FH-Timestamp` | no (now) | When the tests ran, ISO-8601 (not more than 5 minutes in the future). Stamps a new run and its results; use it for late uploads or seeded history |
 
-Re-uploading the same run, attempt and report key is a no-op and returns `200` with the original
+Re-uploading the same CI source, run, attempt and report key is a no-op and returns `200` with the original
 counts; a first upload returns `201`.
+
+**CI source.** `X-FH-CI-Source` names the CI system that ran the tests, so its run ids cannot collide with another
+system's on the same repository. Leave it out when the repository's host runs its own CI: an upload from GitHub
+Actions for a GitHub repository (as above) defaults to `github_actions`, and is the same run as the webhook's. From
+any other CI system that builds the repository, add it to the `curl` above:
+
+```bash
+  -H "X-FH-CI-Source: $FH_CI_SOURCE" \
+```
+
+The value must be one of the `ciSource` values in [openapi.v2.json](openapi.v2.json); anything else is a `400`.
+Today that is only `github_actions`; values such as `gitlab_ci` are added as those CI sources are supported.
 
 **Body size.** The XML may be up to 11 MB, measured after decompression. Send it gzip-compressed with
 `Content-Encoding: gzip` (as above; reports shrink about tenfold). This matters when the API runs behind AWS
@@ -81,21 +96,23 @@ answers `429` with a `Retry-After` header.
 
 ## Read endpoints
 
-Read endpoints use the global `API_TOKEN` as the bearer token. `repo` is a numeric id or
-`owner/name`; `since` is an ISO-8601 timestamp (default: 30 days ago). List endpoints take
+Read endpoints use the global `API_TOKEN` as the bearer token. `repo` is a numeric id or a path (`owner/name`,
+or `group/sub/project` on hosts that nest), optionally prefixed with its host (`github:acme/widgets`). A path without a
+host that matches repositories on more than one host is a `400` naming the hosts, and an unknown host is a `400`.
+`since` is an ISO-8601 timestamp (default: 30 days ago). List endpoints take
 `limit` (default 50, max 200) and `offset`, and return `{ data, page: { limit, offset, total } }`.
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/repos` | Registered repos (`id`, `fullName`, `owner`, `name`), ordered by name |
-| `GET /api/tests/flaky?repo=&since=&minRuns=` | Tests ranked by flake rate: commits where the test both passed and failed, divided by commits it ran on (skipped ignored; `minRuns` defaults to 5) |
-| `GET /api/tests/:id/history?since=&status=` | Newest-first results for one test, with run details |
-| `GET /api/tests/:id/failures` | The 50 most recent failed or errored results for one test, newest first, with failure message and run details (not paginated) |
-| `GET /api/repos/:id/summary?since=` | Totals for the dashboard: runs, tests, results, pass rate, flaky tests and flaky commits |
+| `GET /api/v2/repos` | Registered repos (`id`, `host`, `fullName`, `owner`, `name`), ordered by name |
+| `GET /api/v2/tests/flaky?repo=&since=&minRuns=` | Tests ranked by flake rate: commits where the test both passed and failed, divided by commits it ran on (skipped ignored; `minRuns` defaults to 5) |
+| `GET /api/v2/tests/:id/history?since=&status=` | Newest-first results for one test, with run details (`run.ciRunId`, `run.ciSource`) |
+| `GET /api/v2/tests/:id/failures` | The 50 most recent failed or errored results for one test, newest first, with failure message and run details (not paginated) |
+| `GET /api/v2/repos/:id/summary?since=` | Totals for the dashboard: runs, tests, results, pass rate, flaky tests and flaky commits |
 
 ## Errors
 
-Every `/api` error has the same shape:
+Every error, in either version, has the same shape:
 
 ```json
 { "error": { "code": "validation_error", "message": "...", "details": [{ "path": "querystring.limit", "message": "..." }] }, "requestId": "req-1" }
@@ -103,3 +120,26 @@ Every `/api` error has the same shape:
 
 Codes: `validation_error` (400), `unauthorized` (401), `not_found` (404), `payload_too_large` (413),
 `invalid_report` (422), `rate_limited` (429, with `Retry-After`), `internal_error` (500). `details` appears only on validation errors.
+
+## API v1 (deprecated)
+
+v1 is the same API under `/api` (`POST /api/reports`, `GET /api/repos` and so on). It is removed once every
+first-party consumer uses v2 ([ADR 0012](decisions/0012-api-v2-alongside-v1.md)). Both versions share the same data:
+a run uploaded through one is a duplicate through the other. They differ only here:
+
+| | v1 (`/api`) | v2 (`/api/v2`) |
+| --- | --- | --- |
+| CI run id in `run` objects | `githubRunId` | `ciRunId` |
+| CI system of a run | not shown | `run.ciSource` |
+| Host of a repository | not shown | `host` on each `GET /api/v2/repos` item |
+| CI source of an upload | always the host's own CI; `X-FH-CI-Source` is ignored | `X-FH-CI-Source`, defaulting to the host's own CI |
+| `repo` parameter | numeric id or `owner/name` | numeric id or `[host:]path` |
+
+Every v1 response, errors included, carries the RFC 9745 deprecation headers:
+
+```http
+Deprecation: @1792368000
+Link: </openapi.v2.json>; rel="successor-version", </docs/v2>; rel="deprecation"
+```
+
+To move a client, change the prefix to `/api/v2` and read `run.ciRunId` instead of `run.githubRunId`.
