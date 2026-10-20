@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { sql } from "drizzle-orm";
 import { seedRepo } from "../../test/fixtures.js";
 import { createTestDb } from "../../test/testDb.js";
 import { ApiError } from "./errors.js";
@@ -48,15 +47,11 @@ describe("resolveRepo", () => {
 });
 
 describe("resolveRepo with more than one host", () => {
-  // Only `github` passes the host check today, so these tests lift it to stand in for a second host.
   async function twoHosts() {
     const { db, close } = await createTestDb();
     const github = await seedRepo(db);
-    await db.execute(sql`alter table repos drop constraint repos_host_check`);
-    const { rows } = await db.execute(
-      sql`insert into repos (host, external_repo_id, owner, name, full_name) values ('gitlab', 2, 'acme', 'widgets', 'acme/widgets') returning id`,
-    );
-    return { db, close, githubId: github.id, gitlabId: Number((rows[0] as { id: number }).id) };
+    const gitlab = await seedRepo(db, { host: "gitlab", externalRepoId: 2 });
+    return { db, close, githubId: github.id, gitlabId: gitlab.id };
   }
 
   it("refuses to pick between two hosts for a bare path", async () => {

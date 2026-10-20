@@ -13,7 +13,7 @@ describe("v2 repoRefSchema", () => {
     for (const bad of [
       "",
       "acme",
-      "gitlab:acme/widgets",
+      "bitbucket:acme/widgets",
       "github:acme",
       ":acme/widgets",
       "a//b",

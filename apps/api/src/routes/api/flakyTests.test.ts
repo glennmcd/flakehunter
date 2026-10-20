@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { sql } from "drizzle-orm";
 import { buildApiApp } from "../../../test/apiApp.js";
 import { daysAgo, seedRepo, seedResult, sha } from "../../../test/fixtures.js";
 import { createTestDb, type TestDb } from "../../../test/testDb.js";
@@ -174,7 +173,13 @@ describe("GET /tests/flaky repo paths", () => {
   it("v2 rejects an unknown host prefix and a path without an owner", async () => {
     const { close, app } = await setup(2);
     try {
-      for (const repo of ["gitlab:acme/widgets", "nohost:acme/widgets", "widgets", "github:widgets", ":acme/widgets"]) {
+      for (const repo of [
+        "bitbucket:acme/widgets",
+        "nohost:acme/widgets",
+        "widgets",
+        "github:widgets",
+        ":acme/widgets",
+      ]) {
         const res = await app.inject({ method: "GET", url: `/api/v2/tests/flaky?repo=${repo}` });
         expect(res.statusCode).toBe(400);
         expect(res.json().error.code).toBe("validation_error");
@@ -187,11 +192,7 @@ describe("GET /tests/flaky repo paths", () => {
   it("v2 refuses a bare path that matches repositories on two hosts, naming both, and accepts it qualified", async () => {
     const { db, close, repo, app } = await setup(2);
     try {
-      // Only `github` passes the host check today, so lift it to stand in for a second host.
-      await db.execute(sql`alter table repos drop constraint repos_host_check`);
-      await db.execute(
-        sql`insert into repos (host, external_repo_id, owner, name, full_name) values ('gitlab', 2, 'acme', 'widgets', 'acme/widgets')`,
-      );
+      await seedRepo(db, { host: "gitlab", externalRepoId: 2 });
       await seedFlaky(db, repo.id, "t", 4);
 
       const bare = await app.inject({ method: "GET", url: "/api/v2/tests/flaky?repo=acme/widgets" });

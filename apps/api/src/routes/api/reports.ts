@@ -47,7 +47,7 @@ const reportsRoute: FastifyPluginAsync<ApiRouteOptions> = async (fastify) => {
       schema: {
         tags: ["reports"],
         summary: "Upload a JUnit XML report",
-        description: `Authenticated with a per-repository upload token (not the read token); the repository comes from the token. X-FH-CI-Source names the CI system that ran the tests and defaults to the host's own (github_actions for GitHub). Idempotent on (CI source, run id, attempt, report key): the first upload returns 201, a repeat returns 200 with the original counts. A SHA that contradicts an existing run is a 400. Unparseable bodies or reports with no testsuite are 422 (invalid_report) and store nothing. Rate limited per IP and per token (429 with Retry-After).`,
+        description: `Authenticated with a per-repository upload token (not the read token); the repository comes from the token. X-FH-CI-Source names the CI system that ran the tests and defaults to the host's own (github_actions for GitHub, gitlab_ci for GitLab). Idempotent on (CI source, run id, attempt, report key): the first upload returns 201, a repeat returns 200 with the original counts. A SHA that contradicts an existing run is a 400. Unparseable bodies or reports with no testsuite are 422 (invalid_report) and store nothing. Rate limited per IP and per token (429 with Retry-After).`,
         security: [{ uploadToken: [] }],
         headers: v2.uploadReportHeadersSchema,
         response: {

@@ -20,9 +20,9 @@ afterAll(() => {
   process.env = saved;
 });
 
-async function setup() {
+async function setup(repoOverrides: Parameters<typeof seedRepo>[1] = {}) {
   const { db, close: closeDb } = await createTestDb();
-  const repo = await seedRepo(db);
+  const repo = await seedRepo(db, repoOverrides);
   const { token } = await mintRepoToken(db, repo.id);
   const app = await buildApp({ db, logger: false });
   const upload = (url: string, runId: number, bearer = token, extra: Record<string, string> = {}) =>
@@ -116,6 +116,71 @@ describe("the published API, through buildApp", () => {
       expect(history.json().data.map((d: { run: unknown }) => d.run)).toEqual([
         expect.objectContaining({ ciRunId: 3, ciSource: "github_actions" }),
       ]);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("GitLab repositories and gitlab_ci runs", () => {
+  const read = { authorization: `Bearer ${API_TOKEN}` };
+  const runsOf = async (app: Awaited<ReturnType<typeof setup>>["app"]) =>
+    (await app.inject({ method: "GET", url: "/api/v2/tests/1/history", headers: read }))
+      .json()
+      .data.map((d: { run: unknown }) => d.run);
+
+  it("records an upload for a gitlab repository without X-FH-CI-Source as gitlab_ci", async () => {
+    const { app, upload, close } = await setup({ host: "gitlab", owner: "group/sub", name: "project" });
+    try {
+      const res = await upload("/api/v2/reports", 7);
+      expect(res.statusCode).toBe(201);
+      expect(res.json().run).toEqual(expect.objectContaining({ ciRunId: 7, ciSource: "gitlab_ci" }));
+      expect(await runsOf(app)).toEqual([expect.objectContaining({ ciRunId: 7, ciSource: "gitlab_ci" })]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("keeps a gitlab_ci run apart from a github_actions run with the same id", async () => {
+    const { app, upload, close } = await setup();
+    try {
+      const github = await upload("/api/v2/reports", 5);
+      const gitlab = await upload("/api/v2/reports", 5, undefined, { "x-fh-ci-source": "gitlab_ci" });
+      expect([github.statusCode, gitlab.statusCode]).toEqual([201, 201]);
+      expect((await runsOf(app)).map((r: { ciSource: string }) => r.ciSource).sort()).toEqual([
+        "github_actions",
+        "gitlab_ci",
+      ]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("still refuses an unknown CI source", async () => {
+    const { upload, close } = await setup();
+    try {
+      const res = await upload("/api/v2/reports", 6, undefined, { "x-fh-ci-source": "jenkins" });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error.code).toBe("validation_error");
+    } finally {
+      await close();
+    }
+  });
+
+  it("lists the repository with host gitlab and resolves it by host-qualified path", async () => {
+    const { app, repo, upload, close } = await setup({ host: "gitlab", owner: "group/sub", name: "project" });
+    try {
+      expect((await upload("/api/v2/reports", 8)).statusCode).toBe(201);
+      const listed = await app.inject({ method: "GET", url: "/api/v2/repos", headers: read });
+      expect(listed.json().data).toEqual([
+        expect.objectContaining({ id: repo.id, host: "gitlab", fullName: "group/sub/project" }),
+      ]);
+      const flaky = await app.inject({
+        method: "GET",
+        url: `/api/v2/tests/flaky?repo=${encodeURIComponent("gitlab:group/sub/project")}`,
+        headers: read,
+      });
+      expect(flaky.statusCode).toBe(200);
     } finally {
       await close();
     }

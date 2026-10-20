@@ -1,15 +1,18 @@
 export type TestResultStatus = "passed" | "failed" | "error" | "skipped";
 
 /** Where a repository's code lives; with the host's own repository id, it identifies the repository. */
-export const REPO_HOSTS = ["github"] as const;
+export const REPO_HOSTS = ["github", "gitlab"] as const;
 export type RepoHost = (typeof REPO_HOSTS)[number];
 
 /** The system that ran a workflow and holds its artifacts. One repository's runs can come from several. */
-export const CI_SOURCES = ["github_actions"] as const;
+export const CI_SOURCES = ["github_actions", "gitlab_ci"] as const;
 export type CiSource = (typeof CI_SOURCES)[number];
 
 /** The CI source assumed for a repository's runs when the caller does not name one. */
-export const DEFAULT_CI_SOURCE: Readonly<Record<RepoHost, CiSource>> = { github: "github_actions" };
+export const DEFAULT_CI_SOURCE: Readonly<Record<RepoHost, CiSource>> = {
+  github: "github_actions",
+  gitlab: "gitlab_ci",
+};
 
 export interface Repo {
   id: number;

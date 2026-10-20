@@ -41,7 +41,7 @@ describe("OpenAPI document", () => {
   it("is public (no token) and lists exactly the /api/v2 endpoints", async () => {
     const spec = await getSpec();
     expect(spec.openapi).toBe("3.1.0");
-    expect(spec.info.version).toBe("2.0.1");
+    expect(spec.info.version).toBe("2.1.0");
     expect(Object.keys(spec.paths).sort()).toEqual([
       "/api/v2/reports",
       "/api/v2/repos",

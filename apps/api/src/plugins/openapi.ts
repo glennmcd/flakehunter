@@ -10,9 +10,9 @@ import { MAX_REPORT_BYTES } from "../ingest/limits.js";
  * every release, which would make the committed spec stale each time. Bump the minor for compatible additions and the
  * patch for wording; a breaking change gets a new path prefix instead
  * (docs/decisions/0010-openapi-published-contract.md).
- * v2 is 2.0.1 because removing v1 only reworded descriptions that mentioned it.
+ * v2 is 2.1.0: 2.0.1 reworded descriptions when v1 was removed; 2.1.0 added the gitlab host and gitlab_ci CI source.
  */
-export const API_CONTRACT_VERSIONS: Record<ApiVersion, string> = { 2: "2.0.1" };
+export const API_CONTRACT_VERSIONS: Record<ApiVersion, string> = { 2: "2.1.0" };
 
 const docsPage = (title: string, specUrl: string) => `<!doctype html>
 <html lang="en">

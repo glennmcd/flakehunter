@@ -17,7 +17,7 @@ export const uploadReportHeadersSchema = z.object({
     .datetime({ offset: true })
     .refine((ts) => new Date(ts).getTime() <= Date.now() + MAX_FUTURE_SKEW_MS, "must not be in the future")
     .optional(),
-  /** The CI system that ran the tests. Defaults to the repository host's own CI (github_actions for GitHub). */
+  /** The CI system that ran the tests. Defaults to the repository host's own CI (github_actions for GitHub, gitlab_ci for GitLab). */
   "x-fh-ci-source": ciSourceSchema.optional(),
 });
 

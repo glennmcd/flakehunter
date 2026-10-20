@@ -83,7 +83,7 @@ any other CI system that builds the repository, add it to the `curl` above:
 ```
 
 The value must be one of the `ciSource` values in [openapi.v2.json](openapi.v2.json); anything else is a `400`.
-Today that is only `github_actions`; values such as `gitlab_ci` are added as those CI sources are supported.
+Today those are `github_actions` and `gitlab_ci`; a repository registered with host `gitlab` defaults to `gitlab_ci`.
 
 **Body size.** The XML may be up to 11 MB, measured after decompression. Send it gzip-compressed with
 `Content-Encoding: gzip` (as above; reports shrink about tenfold). This matters when the API runs behind AWS
