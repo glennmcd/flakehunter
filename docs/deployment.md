@@ -105,7 +105,7 @@ by accident. Basic auth sends the password with every request, so only expose th
 ## Demo data
 
 To demo FlakeHunter without wiring up a real repo, generate a fake CI history and upload it through
-the real `POST /api/reports` endpoint. The data is a made-up storefront service with 47 tests: most
+the real `POST /api/v2/reports` endpoint. The data is a made-up storefront service with 47 tests: most
 always pass, six are flaky (one only in the last week, one that stopped three weeks ago, two with
 in-suite retries), one was broken until 12 days ago, and two are skipped. Failed runs are usually
 re-run on the same commit, which is what makes flaky tests show up. Runs are spread over the last 30
@@ -347,8 +347,8 @@ Verify:
 ```bash
 export API_URL='https://....execute-api.us-east-2.amazonaws.com'     # the ApiUrl output
 curl -s "$API_URL/health"                                              # {"ok":true}
-curl -s "$API_URL/api/repos"                                           # 401 unauthorized
-curl -s -H "authorization: Bearer $API_TOKEN" "$API_URL/api/repos"     # the demo repository
+curl -s "$API_URL/api/v2/repos"                                           # 401 unauthorized
+curl -s -H "authorization: Bearer $API_TOKEN" "$API_URL/api/v2/repos"     # the demo repository
 ```
 
 The first request after a quiet period takes about a second longer (a cold start that also reads the secrets).
@@ -789,7 +789,7 @@ quota leaves no room to reserve; then lower the throttle with `-c throttleRate=1
 
 ## Protection against abuse
 
-Upload (`POST /api/reports`) is the only public write path. Layers: a per-repository token (only its hash is stored;
+Upload (`POST /api/v2/reports`) is the only public write path. Layers: a per-repository token (only its hash is stored;
 revocable); a limit of 120 requests per minute per token and per IP, counted in DynamoDB and checked before any
 database lookup; gzip bodies are measured after decompression (11 MB cap, so a small file cannot expand into a huge
 one); HTTP API throttling of 10 requests per second (burst 20); the dashboard behind a password; the demo data in its own Neon
