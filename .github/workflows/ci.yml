@@ -14,6 +14,11 @@ permissions:
 
 jobs:
   check:
+    # release-please's PR and its merge commit only bump versions and the changelog (docs/releasing.md); the code they
+    # release was checked when it was merged, so they get the `release` job below instead.
+    if: >-
+      !startsWith(github.head_ref, 'release-please--') &&
+      !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(main): release'))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -33,3 +38,31 @@ jobs:
       # Bundles the API Lambda and synthesizes the CloudFormation template; nothing is deployed and no AWS
       # credentials are used. Needs Node, which the runner has.
       - run: bun run synth:infra
+
+  release:
+    # Exactly the runs `check` skips.
+    if: >-
+      startsWith(github.head_ref, 'release-please--') ||
+      (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(main): release'))
+    runs-on: ubuntu-24.04
+    steps:
+      # Depth 2 gives HEAD^1: main for a PR's merge commit, the previous commit for a push.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      # A branch name or commit message is not proof of what changed: anything beyond the release files needs `check`.
+      - name: Only release files changed
+        run: |
+          allowed='^(CHANGELOG\.md|package\.json|apps/web/package\.json|\.release-please-manifest\.json)$'
+          other=$(git diff --name-only HEAD^1 HEAD | grep -Ev "$allowed" || true)
+          if [ -n "$other" ]; then
+            echo "::error::This release change touches files besides the version and changelog, so it needs the full CI:"
+            echo "$other"
+            exit 1
+          fi
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      # The three version files must agree (docs/releasing.md, "Rules").
+      - run: bun test scripts/releaseConfig.test.ts

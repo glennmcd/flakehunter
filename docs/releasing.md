@@ -10,6 +10,10 @@ reads the Conventional Commit messages on `main`, keeps one **release PR** open 
 1. You merge PRs to `main` as usual.
 2. The `release-please` workflow (`.github/workflows/release-please.yml`) opens or updates a PR titled
    `chore(main): release X.Y.Z`. It contains the new version and the changelog, nothing else.
+   CI does not run the full check on it, or on its merge into `main`: the code it releases was checked when it was
+   merged. A short `release` job runs instead. It fails if the PR changes anything besides `CHANGELOG.md`,
+   `package.json`, `apps/web/package.json` and `.release-please-manifest.json`, then checks that the three versions
+   agree (`scripts/releaseConfig.test.ts`).
 3. When you want to release, review that PR and merge it. release-please then creates the tag `vX.Y.Z` and a GitHub Release.
 4. Amplify rebuilds `main` as it does for any merge, and the dashboard footer shows `vX.Y.Z · <commit>`.
 
@@ -47,7 +51,7 @@ counts, so keep it in this format.
    **Allow GitHub Actions to create and approve pull requests**. Without it the workflow fails when it tries to open the
    release PR.
 2. **Recommended: a token so CI runs on the release PR.** Pull requests and tags made with the built-in `GITHUB_TOKEN` do
-   not start other workflows, so `ci.yml` would never run on the release PR. Create a fine-grained personal access token
+   not start other workflows, so `ci.yml` (its `release` job) would never run on the release PR. Create a fine-grained personal access token
    (**Settings**, **Developer settings**, **Personal access tokens**, **Fine-grained tokens**) with:
    - Repository access: **Only select repositories**, this one.
    - Repository permissions: **Contents** read and write, **Pull requests** read and write, **Issues** read and write
