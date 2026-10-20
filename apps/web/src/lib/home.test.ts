@@ -2,7 +2,13 @@ import { describe, expect, it } from "bun:test";
 import { ApiClientError } from "./api";
 import { decideHome } from "./home";
 
-const repo = (id: number, fullName: string) => ({ id, fullName, owner: fullName.split("/")[0] ?? "", name: fullName });
+const repo = (id: number, fullName: string) => ({
+  id,
+  host: "github" as const,
+  fullName,
+  owner: fullName.split("/")[0] ?? "",
+  name: fullName,
+});
 
 function client(data: ReturnType<typeof repo>[], total = data.length) {
   return { listRepos: async () => ({ data, page: { limit: 100, offset: 0, total } }) };

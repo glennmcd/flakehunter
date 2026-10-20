@@ -100,7 +100,7 @@ export function HistoryTable({
         <tbody>
           {items.map((item) => {
             const url = safeHttpUrl(item.run.htmlUrl);
-            const runLabel = `${item.run.workflowName} #${item.run.githubRunId}, attempt ${item.run.attempt}`;
+            const runLabel = `${item.run.workflowName} #${item.run.ciRunId}, attempt ${item.run.attempt}`;
             return (
               <tr key={item.resultId}>
                 <td>

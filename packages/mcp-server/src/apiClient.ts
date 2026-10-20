@@ -1,4 +1,4 @@
-import { errorResponseSchema, flakyTestsResponseSchema, testFailuresResponseSchema } from "@flakehunter/shared-types";
+import { v2 } from "@flakehunter/shared-types";
 import type { z } from "zod";
 
 export class ApiClientError extends Error {
@@ -45,7 +45,7 @@ export function createApiClient(config: ApiClientConfig) {
 
     const body: unknown = await response.json().catch(() => undefined);
     if (!response.ok) {
-      const parsed = errorResponseSchema.safeParse(body);
+      const parsed = v2.errorResponseSchema.safeParse(body);
       if (parsed.success) throw new ApiClientError(parsed.data.error.code, parsed.data.error.message, response.status);
       throw new ApiClientError("unknown", `The API responded with HTTP ${response.status}`, response.status);
     }
@@ -67,10 +67,10 @@ export function createApiClient(config: ApiClientConfig) {
       if (params.since !== undefined) search.set("since", params.since);
       if (params.minRuns !== undefined) search.set("minRuns", String(params.minRuns));
       if (params.limit !== undefined) search.set("limit", String(params.limit));
-      return get("/api/tests/flaky", flakyTestsResponseSchema, search);
+      return get("/api/v2/tests/flaky", v2.flakyTestsResponseSchema, search);
     },
 
-    getTestFailures: (testId: number) => get(`/api/tests/${testId}/failures`, testFailuresResponseSchema),
+    getTestFailures: (testId: number) => get(`/api/v2/tests/${testId}/failures`, v2.testFailuresResponseSchema),
   };
 }
 

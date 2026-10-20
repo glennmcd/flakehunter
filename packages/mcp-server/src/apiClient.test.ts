@@ -31,7 +31,7 @@ describe("getFlakyTests", () => {
     const call = calls[0];
     if (!call) throw new Error("no request was made");
     const url = new URL(call.url);
-    expect(url.origin + url.pathname).toBe("http://api.test/api/tests/flaky");
+    expect(url.origin + url.pathname).toBe("http://api.test/api/v2/tests/flaky");
     expect(Object.fromEntries(url.searchParams)).toEqual({ repo: "acme/widgets", minRuns: "3" });
     expect((call.init.headers as Record<string, string>).authorization).toBe("Bearer tok");
   });
@@ -74,7 +74,7 @@ describe("getTestFailures", () => {
     headBranch: "main",
     failureMessage: "boom",
     createdAt: "2026-01-01T00:00:00.000Z",
-    run: { id: 1, githubRunId: 2, attempt: 1, workflowName: "CI", htmlUrl: null },
+    run: { id: 1, ciRunId: 2, ciSource: "github_actions" as const, attempt: 1, workflowName: "CI", htmlUrl: null },
   };
   const test = { id: 7, repoId: 1, classname: "pkg.Foo", name: "a test" };
 
@@ -84,7 +84,7 @@ describe("getTestFailures", () => {
     const result = await client.getTestFailures(7);
 
     expect(result.data).toEqual([failure]);
-    expect(calls[0]?.url).toBe("http://api.test/api/tests/7/failures");
+    expect(calls[0]?.url).toBe("http://api.test/api/v2/tests/7/failures");
     expect((calls[0]?.init.headers as Record<string, string>)?.authorization).toBe("Bearer tok");
   });
 

@@ -20,7 +20,8 @@ function item(over: Partial<HistoryItem> = {}): HistoryItem {
     createdAt: "2026-03-30T12:00:00.000Z",
     run: {
       id: 1,
-      githubRunId: 100,
+      ciRunId: 100,
+      ciSource: "github_actions",
       attempt: 1,
       workflowName: "CI",
       htmlUrl: "https://github.com/o/r/actions/runs/100",
@@ -121,9 +122,18 @@ describe("HistoryTable", () => {
 
   it("never links an unsafe or missing run url", () => {
     const bad = item({
-      run: { id: 1, githubRunId: 5, attempt: 2, workflowName: "CI", htmlUrl: "javascript:alert(1)" },
+      run: {
+        id: 1,
+        ciRunId: 5,
+        ciSource: "github_actions",
+        attempt: 2,
+        workflowName: "CI",
+        htmlUrl: "javascript:alert(1)",
+      },
     });
-    const none = item({ run: { id: 1, githubRunId: 6, attempt: 1, workflowName: "CI", htmlUrl: null } });
+    const none = item({
+      run: { id: 1, ciRunId: 6, ciSource: "github_actions", attempt: 1, workflowName: "CI", htmlUrl: null },
+    });
     const html = renderToStaticMarkup(<HistoryTable items={[bad, none]} flaky={new Set()} />);
     expect(html).not.toContain("javascript:");
     expect(html).toContain("CI #5, attempt 2");

@@ -1,8 +1,8 @@
 // Pure helpers for the test detail page: URL params, flaky-commit detection, chart geometry and formatting.
-import type { TestHistoryResponse } from "@flakehunter/shared-types";
+import type { v2 } from "@flakehunter/shared-types";
 import { DEFAULT_DAYS, PAGE_SIZE, type RawSearchParams, WINDOW_OPTIONS, type WindowDays } from "./overview";
 
-export type HistoryItem = TestHistoryResponse["data"][number];
+export type HistoryItem = v2.TestHistoryResponse["data"][number];
 export type TestStatus = HistoryItem["status"];
 
 export const STATUSES: readonly TestStatus[] = ["passed", "failed", "error", "skipped"];
