@@ -422,20 +422,4 @@ describe("POST /reports X-FH-CI-Source", () => {
       await close();
     }
   });
-
-  it("v1 ignores the header", async () => {
-    const { close, token, app } = await setup(1);
-    try {
-      const res = await app.inject({
-        method: "POST",
-        url: "/api/reports",
-        headers: headers(token, { "x-fh-ci-source": "jenkins" }),
-        payload: XML,
-      });
-      expect(res.statusCode).toBe(201);
-      expect(res.json().run).toEqual({ id: expect.any(Number), githubRunId: 987, attempt: 1, headSha: SHA });
-    } finally {
-      await close();
-    }
-  });
 });

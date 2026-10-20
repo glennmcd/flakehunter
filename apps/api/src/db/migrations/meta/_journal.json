@@ -36,6 +36,13 @@
       "when": 1792459879978,
       "tag": "0004_rename_ci_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792526403632,
+      "tag": "0005_drop_flaky_tests_view",
+      "breakpoints": true
     }
   ]
 }

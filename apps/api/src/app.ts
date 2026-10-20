@@ -23,7 +23,7 @@ export interface BuildAppOptions {
 export async function buildApp(options: BuildAppOptions = {}) {
   const fastify = Fastify({ logger: options.logger ?? true });
 
-  // Routes without a zod schema (the week-1 routes) are unaffected by these compilers.
+  // Routes without a zod schema (health, the webhook) are unaffected by these compilers.
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
 

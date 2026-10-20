@@ -21,7 +21,7 @@ bun run lint             # Biome: lint, format check, import order (fails on any
 bun run lint:fix         # apply Biome's safe fixes
 bun run typecheck        # tsc --noEmit for api, infra and web (web runs `next typegen` first)
 bun run test             # shared-types, api, web, infra, then scripts tests
-bun run openapi:generate # rewrite docs/openapi.json and docs/openapi.v2.json after changing a route schema (`openapi:check` runs in `test`)
+bun run openapi:generate # rewrite docs/openapi.v2.json after changing a route schema (`openapi:check` runs in `test`)
 bun run synth:infra      # bundle the API Lambda and synthesize both CloudFormation stacks (CI runs it; deploys nothing)
 ```
 
@@ -44,7 +44,7 @@ SEED_REPO_OWNER=<owner> SEED_REPO_NAME=<repo> SEED_REPO_EXTERNAL_ID=<id> bun run
 
 `SEED_REPO_HOST` defaults to `github` (the only host today); `SEED_REPO_EXTERNAL_ID` is the host's numeric repo id, and the older `SEED_REPO_GITHUB_ID` still works. The `github_installations` row is only written for `github`.
 
-Minting a per-repo upload token for `POST /api/reports` (printed once; only its sha256 is stored):
+Minting a per-repo upload token for `POST /api/v2/reports` (printed once; only its sha256 is stored):
 
 ```bash
 TOKEN_REPO_FULL_NAME=<owner>/<repo> bun run --env-file=apps/api/.env scripts/create-repo-token.ts   # TOKEN_REPO_HOST defaults to github; nested paths (group/sub/project) are accepted
@@ -98,65 +98,53 @@ The webhook ingestion path runs from the route through the `ingest/` modules:
 
 ### API versions
 
-The published API exists twice (ADR 0012, `docs/plans/api-v2.md`): v2 under `/api/v2` is current, and v1 under `/api` is deprecated and removed once every first-party consumer has moved (the dashboard, the MCP server and flakehunter-airflow already use v2).
+The published API is v2 under `/api/v2` (ADR 0012, `docs/plans/api-v2.md`). v1 (`/api`, `docs/openapi.json`) was removed once the dashboard, the MCP server and flakehunter-airflow had moved; `/api/*` is a 404, and `/docs` redirects to `/docs/v2`. A breaking change goes under the next prefix, next to v2 (ADR 0010).
 
-- **One handler, two mounts:** each file in `routes/api/` is a `FastifyPluginAsync<ApiRouteOptions>` registered once per version by `registerApiVersion` (`api/version.ts`) under `apiPrefix(version)`, with `{ apiVersion }`. A route picks its schemas by version (`v2.*` from `@flakehunter/shared-types` for v2; the top-level exports are v1) and nothing else differs in the handler.
-- **Shapes:** domain functions return the v2 shape (`run.ciRunId`, `run.ciSource`, repo `host`). The v1 mappers in `api/v1.ts` (`toV1Upload`, `toV1History`, `toV1Failures`, `toV1Repos`) rename `ciRunId` to `githubRunId` and drop `ciSource` and `host`. New response fields go in the v2 shape and are dropped or kept for v1 in the mapper.
-- **v2-only inputs:** `X-FH-CI-Source` on uploads (a `CiSource`, default `DEFAULT_CI_SOURCE[repo.host]`; v1 ignores it), and `repo` as an id or `[host:]path` with nested paths (`resolveRepo`; a bare path on several hosts is a 400 naming them).
-- **Deprecation:** the v1 context's `onSend` hook adds `V1_DEPRECATION_HEADERS` (`Deprecation: @<V1_DEPRECATED_AT>` and `Link`s to `/openapi.v2.json` and `/docs/v2`) to every v1 response, errors and 429s included, and to nothing else.
-- **Tests:** route tests run `describe.each([...API_VERSIONS])`; `test/fixtures.ts`' `runIdentity(apiVersion, ...)` builds the expected `run` fields. `api/versions.test.ts` covers the two versions together and `api/deprecation.test.ts` the headers.
+- **Versioned mounts:** each file in `routes/api/` is a `FastifyPluginAsync<ApiRouteOptions>` registered once per entry in `API_VERSIONS` (only `2`) by `registerApiVersion` (`api/version.ts`) under `apiPrefix(version)`, with `{ apiVersion }`. Routes use the `v2.*` schemas from `@flakehunter/shared-types`.
+- **Shapes:** domain functions return the v2 shape (`run.ciRunId`, `run.ciSource`, repo `host`) and routes send it as is.
+- **Inputs:** `X-FH-CI-Source` on uploads (a `CiSource`, default `DEFAULT_CI_SOURCE[repo.host]`), and `repo` as an id or `[host:]path` with nested paths (`resolveRepo`; a bare path on several hosts is a 400 naming them).
+- **Tests:** route tests run `describe.each([...API_VERSIONS])`; `test/fixtures.ts`' `runIdentity(apiVersion, ...)` builds the expected `run` fields. `api/versions.test.ts` covers the API through `buildApp`, including that v1, its spec and the week-1 routes are gone.
 
 ### Upload path
 
-`POST /api/v2/reports` (and v1's `POST /api/reports`; `routes/api/reports.ts`) takes a raw XML body (`application/xml` or `text/xml`, 11 MB limit) with metadata in headers (`X-FH-Run-Id`, `X-FH-Sha`, optional `X-FH-Run-Attempt`, `X-FH-Branch`, `X-FH-Workflow`, `X-FH-Report-Key`, `X-FH-Timestamp`). `X-FH-Timestamp` (ISO-8601, at most 5 minutes in the future) backdates a new run and its results through `ingestReport`'s `timestamp` and `insertParsedSuites`' `createdAt`; an existing run row keeps its own `created_at`. Without it everything is stamped with the DB's `now()`.
+`POST /api/v2/reports` (`routes/api/reports.ts`) takes a raw XML body (`application/xml` or `text/xml`, 11 MB limit) with metadata in headers (`X-FH-Run-Id`, `X-FH-Sha`, optional `X-FH-Run-Attempt`, `X-FH-Branch`, `X-FH-Workflow`, `X-FH-Report-Key`, `X-FH-Timestamp`). `X-FH-Timestamp` (ISO-8601, at most 5 minutes in the future) backdates a new run and its results through `ingestReport`'s `timestamp` and `insertParsedSuites`' `createdAt`; an existing run row keeps its own `created_at`. Without it everything is stamped with the DB's `now()`.
 
 - It authenticates with a per-repo token, not `API_TOKEN`: a route-level `onRequest` hook calls `auth/repoToken.ts` (`findRepoByToken`, sha256 lookup, revocable). The repo comes from the token, never from the request. The hook runs before body parsing and header validation.
-- `ingest/ingestReport.ts` does the work in one transaction. Idempotency is the `reports` table, unique on `(run_id, report_key)`; the run is keyed on `(repo_id, ci_source, ci_run_id, run_attempt)`. The route passes the CI source: `X-FH-CI-Source` in v2, otherwise `DEFAULT_CI_SOURCE[repo.host]` (`findRepoByToken` returns the host); a webhook delivery and an upload of the same GitHub Actions run, through either version, therefore share one run row. A repeat returns 200 with the original counts (stored on the `reports` row); a first upload returns 201. A SHA that contradicts an existing run is a 400, and an existing run row (e.g. from the webhook) is reused, not overwritten.
+- `ingest/ingestReport.ts` does the work in one transaction. Idempotency is the `reports` table, unique on `(run_id, report_key)`; the run is keyed on `(repo_id, ci_source, ci_run_id, run_attempt)`. The route passes the CI source: `X-FH-CI-Source`, otherwise `DEFAULT_CI_SOURCE[repo.host]` (`findRepoByToken` returns the host); a webhook delivery and an upload of the same GitHub Actions run therefore share one run row. A repeat returns 200 with the original counts (stored on the `reports` row); a first upload returns 201. A SHA that contradicts an existing run is a 400, and an existing run row (e.g. from the webhook) is reused, not overwritten.
 - Unparseable bodies or reports with no `<testsuite>` are `invalid_report` (422) and leave nothing behind.
 - **gzip:** `Content-Encoding: gzip` is accepted (`http/gzipBody.ts`, a `preParsing` hook that runs after the token check). The 11 MB limit applies to the **decompressed** size, enforced while streaming so a decompression bomb is destroyed at the limit (`413 payload_too_large`); bad gzip data is a `400`, and any other encoding is a `400`. This matters because a Lambda request body is capped near 6 MB (about 4.5 MB raw after base64), so large reports must be sent compressed; `scripts/seed-demo.ts` and the CI snippet in `docs/api.md` do.
 - **Rate limit:** an `onRequest` hook (`plugins/rateLimit.ts`, `ratelimit/`) runs before the token lookup and counts each request under its source IP and, if it sends one, a sha256 of its bearer token (the raw token is never stored). Past `UPLOAD_RATE_LIMIT_MAX` (default 120) per `UPLOAD_RATE_LIMIT_WINDOW_SECONDS` (default 60) it answers `429 rate_limited` with `Retry-After`. Counting by IP is what stops a flood of invented tokens. The store is a `RateLimitStore`: in memory for tests and local runs, a DynamoDB fixed-window counter (atomic `ADD`, TTL) on Lambda, where `buildApp` refuses to start without `RATE_LIMIT_TABLE`. A failing store lets requests through and logs a warning. `buildApp({ rateLimit })` overrides it in tests; tests that upload many reports from one address (the seed e2e) raise the limit.
 
-Read endpoints (global `API_TOKEN`), each under `/api/v2` and `/api`:
+Read endpoints (global `API_TOKEN`):
 
 - `GET /api/v2/tests/flaky?repo=&since=&minRuns=` (`flaky/flakeRateQueries.ts`): flake rate = flaky SHAs / SHAs run in the window, skipped results ignored, only tests with at least `minRuns` (default 5) SHAs and one flaky SHA.
 - `GET /api/v2/tests/:id/history` (`history/testHistoryQueries.ts`): newest-first results; never returns `failureStack`.
 - `GET /api/v2/tests/:id/failures` (`history/testFailuresQueries.ts`): the 50 most recent failed/error results for a test, newest first, with run details and no pagination; never returns `failureStack`.
 - `GET /api/v2/repos/:id/summary` (`summary/repoSummaryQueries.ts`): windowed totals; `lastRunAt` ignores the window.
-- **OpenAPI:** `plugins/openapi.ts` publishes the API routes (those with a `tags` entry) as two documents split by path: v1 at the public `GET /openapi.json` and `/docs` (committed as `docs/openapi.json`, every operation `deprecated`), v2 at `GET /openapi.v2.json` and `/docs/v2` (`docs/openapi.v2.json`). A new route needs `tags`, `summary`, `errorResponses(...)` and regenerated specs. Each version's `info.version` is a hand-bumped constant (ADR 0010). The specs and docs pages are in the auth exemption.
-- `GET /api/v2/repos` (`repos/repoQueries.ts`): paginated repo list ordered by full name, with `host` in v2; the web app needs it to find a repo's numeric id.
+- **OpenAPI:** `plugins/openapi.ts` publishes the API routes (those with a `tags` entry) as one document per version, cut by path: v2 at the public `GET /openapi.v2.json` and `/docs/v2` (committed as `docs/openapi.v2.json`); `/docs` redirects to `/docs/v2`. A new route needs `tags`, `summary`, `errorResponses(...)` and a regenerated spec. `info.version` is a hand-bumped constant in `API_CONTRACT_VERSIONS` (ADR 0010). The spec, the docs page and the redirect are in the auth exemption.
+- `GET /api/v2/repos` (`repos/repoQueries.ts`): paginated repo list ordered by full name, with `host`; the web app needs it to find a repo's numeric id.
 
 ### Demo data
 
-`scripts/demo/` generates a fake CI history and `scripts/seed-demo.ts` uploads it through `POST /api/reports`:
+`scripts/demo/` generates a fake CI history and `scripts/seed-demo.ts` uploads it through `POST /api/v2/reports`:
 
 - `catalog.ts` is the fake service's test list with a behaviour per test (`stable`, `skipped`, `flaky` with probability, in-suite retries and an optional active window, `failing-until` a fix date). `generateRuns.ts` turns it into runs; `junit.ts` builds the XML; `seedDemo.ts` has config parsing, the HTTP uploader and the retrying seeder.
 - The generator is pure and deterministic. Every random draw comes from a PRNG keyed on (seed, calendar day, commit, attempt), never the clock, and windows like "flaky only in the last 7 days" count whole UTC calendar days. Regenerating later therefore reproduces earlier runs exactly, so re-seeding returns `200` duplicates. Run ids embed the seed, so a new `DEMO_SEED` is new data.
 - These files import only node built-ins (root scripts cannot resolve API dependencies). Tests may import from `apps/api`: `seed.e2e.test.ts` uploads the full history through `buildApp()` over PGlite and checks the API's flaky ranking and summary against what the generator produced.
 
-`perShaCte` in `flaky/flakeRateQueries.ts` is the single definition of "flaky SHA" for the ranking and the summary. The older `flaky_tests` view still backs the week-1 `/repos/:id/flaky-tests` routes, which are unchanged.
+`perShaCte` in `flaky/flakeRateQueries.ts` is the single definition of "flaky SHA" for the ranking and the summary. There is no view or stored flaky state: the `flaky_tests` view (migration `0001`) backed the week-1 routes and was dropped with them in `0005_drop_flaky_tests_view.sql`.
 
-Zod schemas for all API requests and responses live in `packages/shared-types/src/api/` (v1) and `src/api/v2/` (the changed v2 schemas, re-exporting the rest). Every API error, in either version, uses one body, `{ error: { code, message, details? }, requestId }`, produced by `plugins/errorHandler.ts` from `ApiError` (`api/errors.ts`). Lists use `?limit=&offset=` and return `{ data, page: { limit, offset, total } }`.
+Zod schemas for all API requests and responses are exported as `v2.*` from `packages/shared-types/src/api/v2/`. Schemas that name a CI run, CI source or host are defined there; the rest live in `src/api/` and are re-exported. Every API error uses one body, `{ error: { code, message, details? }, requestId }`, produced by `plugins/errorHandler.ts` from `ApiError` (`api/errors.ts`). Lists use `?limit=&offset=` and return `{ data, page: { limit, offset, total } }`.
 
 Test identity is `classname + name`, scoped per repo. Duplicate names within one suite (retries) get an increasing `occurrence_index`. `repo_id` and `head_sha` are denormalized onto `test_results` so the flaky query needs no joins to runs.
-
-### Flaky detection is a SQL view, not stored state
-
-`flaky_tests` is defined in the hand-written migration `src/db/migrations/0001_flaky_tests_view.sql`. It groups `test_results` by `(repo_id, test_case_id, head_sha)` and keeps groups with at least one `passed` and at least one `failed`/`error`.
-
-`schema.ts` mirrors the view with `pgView(...).existing()` so it can be queried with types, while drizzle-kit ignores it. To change the view:
-
-1. Create a custom migration: `bunx drizzle-kit generate --custom --name=<name>`.
-2. Update the `pgView` columns to match.
-
-`flaky/flakyQueries.ts` reads the view. `GET /repos/:id/flaky-tests?summary=true` returns a per-test rollup across SHAs.
 
 ### Fastify conventions that have caused bugs
 
 - **Explicit route registration:** `routes/index.ts` lists every route plugin with its URL prefix (`routeModules`) and `app.ts` registers them through `registerRoutes`. There is no autoload: a bundler (esbuild for Lambda) cannot see files imported from disk at runtime. Adding a route file means adding an entry there; `routes/routes.test.ts` fails if a file on disk is missing from the list.
-- **Route prefixing:** files in `routes/api/` are mounted at `/api` and `/api/v2` (`versions: API_VERSIONS` in `routeModules`), and `routes/webhooks/github.ts` at `/webhooks` (it registers `/github` to serve `/webhooks/github`; writing the full path double-prefixes it). Keep `/api` route files flat in `routes/api/` and write the path after `/api` (e.g. `/tests/flaky`).
+- **Route prefixing:** files in `routes/api/` are mounted at `/api/v2` (`versions: API_VERSIONS` in `routeModules`), and `routes/webhooks/github.ts` at `/webhooks` (it registers `/github` to serve `/webhooks/github`; writing the full path double-prefixes it). Keep route files flat in `routes/api/` and write the path after the version prefix (e.g. `/tests/flaky`).
 - **App wiring:** `app.ts` exports `buildApp({ db?, logger?, ciSources? })` (zod validator/serializer compilers, error handler, db, auth, ciSources, explicit routes); `index.ts` only calls it and listens. `app.test.ts` builds the real app over PGlite.
 - **Auth hook:** `plugins/auth.ts` is a global `onRequest` hook (wrapped in `fastify-plugin`) that requires `Authorization: Bearer <API_TOKEN>`.
-  - It exempts `/webhooks/github`, `/health`, `/api/reports`, `/api/v2/reports`, both specs and both docs pages by exact match on the path part of `request.url`. `routeOptions.url` is not reliable there, and the hook also runs for unmatched routes. The upload routes do their own per-repo token check.
+  - It exempts `/webhooks/github`, `/health`, `/api/v2/reports`, `/openapi.v2.json`, `/docs` and `/docs/v2` by exact match on the path part of `request.url`. `routeOptions.url` is not reliable there, and the hook also runs for unmatched routes. The upload route does its own per-repo token check.
   - New public routes must be added to that exemption.
 - **Decorators:** `plugins/db.ts` and `plugins/ciSources.ts` decorate `fastify.db` (Drizzle over postgres-js) and `fastify.ciSources` (a `CiSourceRegistry` holding `GithubActionsAdapter`, built from `GITHUB_PAT`, which is still required at startup).
 - **Lambda entry:** `src/lambda.ts` exports `handler` (`createHandler` in `lambda/handler.ts`): it reads the secrets from SSM (`lambda/secrets.ts`, `loadSecrets`) into `process.env`, builds the app once per execution environment and wraps it with `@fastify/aws-lambda`. The adapter must wrap the app **before** `app.ready()`. A failed start is not cached. `index.ts` stays the long-running entry for local runs. Lambda runs Node 22, not Bun; the source uses no Bun-only APIs, so keep it that way.
@@ -219,7 +207,7 @@ Version numbers come from release-please (`.github/workflows/release-please.yml`
 
 - Only `workflow_run` `completed` events are handled, and one artifact per run is assumed.
 - Read auth is a single static token; upload tokens are per repo but have no management endpoint (mint with `scripts/create-repo-token.ts`, revoke with `scripts/revoke-repo-token.ts`). There is no OAuth.
-- Upload rate limiting exists (per IP and per token); reads are limited only by API Gateway throttling. The week-1 routes (`/repos`, `/flaky`, `/runs`, `/tests`) no longer have a caller since the old Vite dashboard was removed (`apps/web` uses API v2); removing them is a follow-up.
+- Upload rate limiting exists (per IP and per token); reads are limited only by API Gateway throttling.
 - Webhook processing still runs inside the request (artifact download and unzip). That suits small demo artifacts; a queue (SQS) is the follow-up for anything larger, since GitHub expects an answer within 10 seconds.
 - The build plans are in `docs/plans/` (`README.md` indexes them; the plans as approved are in `docs/plans/archive/`), and the architecture decision records are in `docs/decisions/`.
 

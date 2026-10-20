@@ -28,4 +28,8 @@ needs a stable description of the upload and read endpoints, and the MCP server'
 - Changing a route means regenerating and committing `docs/openapi.json`; a forgotten regeneration fails CI.
 - `info.version` is bumped by hand when the contract changes.
 - A test in `packages/mcp-server` checks the two tool inputs against the committed spec.
+
+**Update (ADR 0012):** v1 was retired. The contract is now `docs/openapi.v2.json`, served at `/openapi.v2.json` with its
+page at `/docs/v2`; `/docs` redirects there. Versioning by path is unchanged: the next breaking change goes under
+`/api/v3`.
 - Swagger UI needs the visitor's browser to reach jsDelivr; the spec itself does not.

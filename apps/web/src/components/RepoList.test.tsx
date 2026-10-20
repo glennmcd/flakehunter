@@ -3,8 +3,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RepoList } from "./RepoList";
 
 const repos = [
-  { id: 3, fullName: "flakehunter-demo/storefront", owner: "flakehunter-demo", name: "storefront" },
-  { id: 5, fullName: "glennmcd/<b>x</b>", owner: "glennmcd", name: "<b>x</b>" },
+  {
+    id: 3,
+    fullName: "flakehunter-demo/storefront",
+    owner: "flakehunter-demo",
+    name: "storefront",
+    host: "github" as const,
+  },
+  { id: 5, fullName: "glennmcd/<b>x</b>", owner: "glennmcd", name: "<b>x</b>", host: "github" as const },
 ];
 
 describe("RepoList", () => {

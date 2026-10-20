@@ -1,7 +1,7 @@
-import type { RepoItem } from "@flakehunter/shared-types";
+import type { v2 } from "@flakehunter/shared-types";
 import Link from "next/link";
 
-export function RepoList({ repos, total }: { repos: RepoItem[]; total: number }) {
+export function RepoList({ repos, total }: { repos: v2.RepoItem[]; total: number }) {
   return (
     <main>
       <h1>Repositories</h1>

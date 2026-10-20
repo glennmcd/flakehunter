@@ -89,12 +89,12 @@ describe("Lambda handler", () => {
   it("applies the loaded secrets so the auth plugin accepts the API token", async () => {
     const { call, close } = await setup();
     try {
-      const denied = await call(event({ method: "GET", path: "/api/repos" }));
+      const denied = await call(event({ method: "GET", path: "/api/v2/repos" }));
       expect(denied.statusCode).toBe(401);
       expect(denied.json()).toMatchObject({ error: { code: "unauthorized" } });
 
       const ok = await call(
-        event({ method: "GET", path: "/api/repos", headers: { authorization: `Bearer ${SECRETS.API_TOKEN}` } }),
+        event({ method: "GET", path: "/api/v2/repos", headers: { authorization: `Bearer ${SECRETS.API_TOKEN}` } }),
       );
       expect(ok.statusCode).toBe(200);
       expect(ok.json()).toMatchObject({ data: [{ fullName: "acme/widgets" }], page: { total: 1 } });
@@ -109,7 +109,7 @@ describe("Lambda handler", () => {
       const res = await call(
         event({
           method: "GET",
-          path: "/api/repos",
+          path: "/api/v2/repos",
           query: "limit=1&offset=5",
           headers: { authorization: `Bearer ${SECRETS.API_TOKEN}` },
         }),
@@ -126,7 +126,7 @@ describe("Lambda handler", () => {
       call(
         event({
           method: "POST",
-          path: "/api/reports",
+          path: "/api/v2/reports",
           headers: {
             authorization: `Bearer ${token}`,
             "content-type": "application/xml",
@@ -152,7 +152,7 @@ describe("Lambda handler", () => {
       call(
         event({
           method: "POST",
-          path: "/api/reports",
+          path: "/api/v2/reports",
           headers: {
             authorization: `Bearer ${token}`,
             "content-type": "application/xml",

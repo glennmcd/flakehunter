@@ -20,5 +20,5 @@ flaky SHAs divided by the number of SHAs the test ran on.
 - A flake surfaces only when a test runs more than once on a commit: a re-run, another workflow or job, or an
   in-suite retry. A test that runs once per commit never shows as flaky.
 - `perShaCte` in `apps/api/src/flaky/flakeRateQueries.ts` is the single definition for the ranking and the summary;
-  the older `flaky_tests` view backs the Part 1 routes.
+  the older `flaky_tests` view backed the Part 1 routes and was dropped with them (migration `0005`).
 - `repo_id` and `head_sha` are copied onto `test_results` so the query needs no joins.

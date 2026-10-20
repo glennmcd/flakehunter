@@ -45,7 +45,7 @@ flowchart BT
   U(["You, in a browser"])
   AI(["AI assistant<br/>via MCP server"])
 
-  GA -- "POST /api/reports<br/>or workflow_run webhook (optional)" ---> APIGW
+  GA -- "POST /api/v2/reports<br/>or workflow_run webhook (optional)" ---> APIGW
   GHAPI -. "artifact download<br/>(webhook only)" .-> L
   APIGW --> L
   SSM -. "secrets at cold start" .-> L
@@ -78,10 +78,10 @@ flowchart BT
   U(["You, in a browser"])
   AI(["AI assistant"])
 
-  GA -- "workflow_run webhook<br/>or POST /api/reports" --> T
+  GA -- "workflow_run webhook<br/>or POST /api/v2/reports" --> T
   GHAPI -- "artifact download" --> API
   T --> API
-  SEED -- "POST /api/reports" --> API
+  SEED -- "POST /api/v2/reports" --> API
   ENV -. "read at start" .-> API
   API <--> DB
   U --> WEB

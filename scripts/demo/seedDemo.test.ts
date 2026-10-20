@@ -79,7 +79,7 @@ describe("uploadHeaders", () => {
 });
 
 describe("httpUploader", () => {
-  it("POSTs the gzipped XML to /api/reports with the headers and returns status, body and Retry-After", async () => {
+  it("POSTs the gzipped XML to /api/v2/reports with the headers and returns status, body and Retry-After", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     const fakeFetch = (async (url: string, init: RequestInit) => {
       calls.push({ url, init });
@@ -90,7 +90,7 @@ describe("httpUploader", () => {
 
     expect(response).toEqual({ status: 429, body: '{"error":"slow down"}', retryAfterSeconds: 7 });
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe("https://demo.example.com/api/reports");
+    expect(calls[0]?.url).toBe("https://demo.example.com/api/v2/reports");
     expect(calls[0]?.init.method).toBe("POST");
     expect(gunzipSync(calls[0]?.init.body as Uint8Array).toString()).toBe("<testsuite/>");
     expect(calls[0]?.init.headers).toEqual({ ...uploadHeaders(sample, "fh_secret"), "content-encoding": "gzip" });

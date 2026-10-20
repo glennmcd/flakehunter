@@ -40,8 +40,8 @@ FlakeHunter's riskiest job is processing what CI sends it, so all of it is treat
   The password is compared in constant time, and the gate covers every path, including static assets.
 - **The read token never reaches the browser.** The dashboard calls the API from the server, so there is no CORS
   setup and no token in client-side code.
-- **The auth hook allows by exception.** It runs on every request; only `/health`, the webhook and `/api/reports`
-  (which checks its own token) are exempt.
+- **The auth hook allows by exception.** It runs on every request; only `/health`, the webhook, `/api/v2/reports`
+  (which checks its own token) and the public OpenAPI spec and docs pages are exempt.
 
 ### Secrets
 

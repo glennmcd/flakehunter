@@ -1,11 +1,11 @@
 import { createTestDb } from "../../test/testDb.js";
-import type { ApiVersion } from "../api/version.js";
+import { API_VERSIONS, type ApiVersion } from "../api/version.js";
 import { buildApp } from "../app.js";
 import { specForVersion } from "../plugins/openapi.js";
 
 /**
  * Builds the app over an empty in-memory database and returns each version's OpenAPI document as text, pretty-printed
- * with a trailing newline. This is what docs/openapi.json (v1) and docs/openapi.v2.json hold; scripts/openapi.ts
+ * with a trailing newline. This is what docs/openapi.v2.json holds; scripts/openapi.ts
  * writes or checks them.
  */
 export async function buildSpecTexts(): Promise<Record<ApiVersion, string>> {
@@ -19,7 +19,7 @@ export async function buildSpecTexts(): Promise<Record<ApiVersion, string>> {
     await app.ready();
     const full = app.swagger();
     const text = (version: ApiVersion) => `${JSON.stringify(specForVersion(full, version), null, 2)}\n`;
-    return { 1: text(1), 2: text(2) };
+    return Object.fromEntries(API_VERSIONS.map((version) => [version, text(version)])) as Record<ApiVersion, string>;
   } finally {
     await app.close();
     await close();

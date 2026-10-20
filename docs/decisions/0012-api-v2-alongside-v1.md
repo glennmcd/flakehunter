@@ -1,6 +1,8 @@
 # 0012: API v2 alongside v1
 
-**Status:** Accepted ([API v2 alongside v1](../plans/api-v2.md))
+**Status:** Accepted ([API v2 alongside v1](../plans/api-v2.md)). v1 was retired on 2026-10-20 under the rule below:
+the `/api` mounts, `api/v1.ts`, the v1 schemas and `docs/openapi.json` are gone, `/openapi.json` is a 404 and `/docs`
+redirects to `/docs/v2`.
 
 ## Context
 

@@ -31,7 +31,7 @@ describe("seeding against an API with a small upload rate limit", () => {
       const upload = async (req: UploadRequest): Promise<UploadResponse> => {
         const res = await app.inject({
           method: "POST",
-          url: "/api/reports",
+          url: "/api/v2/reports",
           headers: uploadHeaders(req, token),
           payload: req.xml,
           remoteAddress: "203.0.113.50",

@@ -1,7 +1,7 @@
 # CI source adapters
 
-**Status:** Implemented in [#15](https://github.com/glennmcd/flakehunter/pull/15). Retiring API v1 is still open
-(see [Remaining work](#remaining-work)). The decision is [ADR 0011](../decisions/0011-repository-hosts-and-ci-sources.md);
+**Status:** Implemented in [#15](https://github.com/glennmcd/flakehunter/pull/15); API v1 has since been retired. The
+decision is [ADR 0011](../decisions/0011-repository-hosts-and-ci-sources.md);
 `CLAUDE.md` ("Ingestion path") is the day-to-day reference.
 
 FlakeHunter keeps two things apart that were one while everything was GitHub:
@@ -16,7 +16,7 @@ can come from several CI sources. CI-specific fetching sits behind a `CiSourceAd
 `GithubActionsAdapter` as the only implementation.
 
 Every repository today is `github` and every run is `github_actions`. The host and CI source are exposed in
-[API v2](api-v2.md); v1 exposes neither. This is the groundwork for GitLab (flakehunter-airflow's
+[API v2](api-v2.md). This is the groundwork for GitLab (flakehunter-airflow's
 [GitLab ingest](https://github.com/glennmcd/flakehunter-airflow/blob/main/docs/plans/gitlab-ingest.md)) and for CI-only
 systems.
 
@@ -37,7 +37,6 @@ All paths are under `apps/api/src/` unless noted.
 | Repo identity | `db/schema.ts`, `api/resolveRepo.ts`, `auth/repoToken.ts` | unique `(host, external_repo_id)` and `(host, full_name)`; `findRepoByToken` returns `host` |
 | Run identity | `db/schema.ts` | `workflow_runs_run_key_unique` on `(repo_id, ci_source, ci_run_id, run_attempt)` |
 | Queries | `history/testHistoryQueries.ts`, `history/testFailuresQueries.ts` | select `ciRunId` and `ciSource` and return the v2 shape |
-| v1 shape | `api/v1.ts` | `toV1History`, `toV1Failures`, `toV1Upload`, `toV1Repos` rename `ciRunId` to `githubRunId` and drop `ciSource` and `host` |
 | Scripts | `scripts/seed-dev-repo.ts`, `scripts/create-repo-token.ts` | `SEED_REPO_HOST`, `TOKEN_REPO_HOST` (default `github`) |
 | Test helpers | `apps/api/test/fixtures.ts` | `seedRepo({ host })`, `seedRun({ ciSource })`, `runIdentity(apiVersion, …)` |
 
@@ -174,12 +173,11 @@ How the values propagate:
 
 - **Webhook:** `processCiRun` writes `ci_source` from `CiRunInput` and uses it in the upsert target.
 - **Upload:** `findRepoByToken` returns `{ id, host, fullName }`. `routes/api/reports.ts` passes
-  `ciSource: X-FH-CI-Source ?? DEFAULT_CI_SOURCE[repo.host]` to `ingestReport`; v1 never reads the header. `ingestReport`
+  `ciSource: X-FH-CI-Source ?? DEFAULT_CI_SOURCE[repo.host]` to `ingestReport`. `ingestReport`
   uses the CI source both when inserting the run and when looking up an existing one, so idempotency is (repo, CI
-  source, run id, attempt, report key). A v1 upload, a v2 upload without the header and one naming `github_actions` are
-  the same run.
-- **Reads:** the query modules and `ingestReport` return the v2 shape (`run.ciRunId`, `run.ciSource`, repo `host`).
-  `api/v1.ts` maps it to v1 (`githubRunId`, no `ciSource`, no `host`) for the `/api` mounts.
+  source, run id, attempt, report key). An upload without the header and one naming `github_actions` are the same run.
+- **Reads:** the query modules and `ingestReport` return the v2 shape (`run.ciRunId`, `run.ciSource`, repo `host`),
+  which the routes send as is.
 
 An upload from the flakehunter-airflow DAG and a webhook delivery for the same GitHub Actions run both resolve to
 `github_actions`, so the two paths never count a run twice.
@@ -187,7 +185,7 @@ An upload from the flakehunter-airflow DAG and a webhook delivery for the same G
 Flaky detection does not change. A test that passes on Jenkins and fails on GitHub Actions for the same SHA is flaky,
 which is what "regardless of which workflow or job produced the results" already means.
 
-`resolveRepo` matches `full_name` within a host when one is given (`github:acme/widgets` in v2). A bare path that
+`resolveRepo` matches `full_name` within a host when one is given (`github:acme/widgets`). A bare path that
 matches repositories on more than one host is a 400 naming the hosts; with only `github`, nothing is ambiguous. Paths
 can be nested (`group/sub/project`), in the API and in `TOKEN_REPO_FULL_NAME`.
 
@@ -203,22 +201,20 @@ can be nested (`group/sub/project`), in the API and in `TOKEN_REPO_FULL_NAME`.
 
 ## Remaining work
 
-1. **Retire API v1.** The web app, `packages/mcp-server` and the flakehunter-airflow DAG use `/api/v2`
-   ([ADR 0012](../decisions/0012-api-v2-alongside-v1.md)). Removing the `/api` mounts, `api/v1.ts`, the v1 schemas in
-   `packages/shared-types/src/api/` and `docs/openapi.json` takes the last `githubRunId` with them.
-2. **GitLab values.** `gitlab` in `REPO_HOSTS` and `repos_host_check`, `gitlab_ci` in `CI_SOURCES` and
+1. **GitLab values.** `gitlab` in `REPO_HOSTS` and `repos_host_check`, `gitlab_ci` in `CI_SOURCES` and
    `workflow_runs_ci_source_check`, `DEFAULT_CI_SOURCE.gitlab = "gitlab_ci"`, and a regenerated
    `docs/openapi.v2.json`, released under a new tag. flakehunter-airflow re-pins to that tag before its GitLab DAG
    lands; it is pinned at `v0.3.0`, where the enums hold only `github` and `github_actions`. No GitLab adapter is
    needed: GitLab data arrives through `POST /api/v2/reports`, and an adapter matters only for a future GitLab webhook.
-3. **flakehunter-airflow**, as part of its GitLab work: move `download_artifact` out of `github.py` into a shared
+2. **flakehunter-airflow**, as part of its GitLab work: move `download_artifact` out of `github.py` into a shared
    module, and reword the `RunHeaders` docstring in `client.py`, which says the values come from the GitHub
    `workflow_run`.
 
-After v1 is removed, `grep -ri github` over `apps/api/src` outside `ci/githubActions/`, `routes/webhooks/`, the
-migrations and tests should find only the webhook's wiring (its registration in `routes/index.ts`, its auth exemption
-in `plugins/auth.ts`, `github_installations`), the GitHub adapter in `plugins/ciSources.ts`, and `github` or
-`github_actions` as values and in examples.
+With v1 retired ([ADR 0012](../decisions/0012-api-v2-alongside-v1.md)), `grep -ri github` over `apps/api/src`
+outside `ci/githubActions/`, `routes/webhooks/`, the migrations and tests finds only the webhook's wiring (its
+registration in `routes/index.ts`, its auth exemption in `plugins/auth.ts`, `github_installations`), the GitHub adapter
+in `plugins/ciSources.ts`, the GitHub secrets (`GITHUB_PAT`, `GITHUB_WEBHOOK_SECRET`) in `app.ts`, `lambda/secrets.ts`
+and `openapi/buildSpec.ts`, and `github` or `github_actions` as values and in examples.
 
 ## Still GitHub-specific by design
 
@@ -226,7 +222,6 @@ in `plugins/auth.ts`, `github_installations`), the GitHub adapter in `plugins/ci
   `github_installations` only for `github`.
 - `packages/shared-types/src/github.ts`: the `workflow_run` payload type.
 - `/webhooks/github`, `GITHUB_PAT` and `GITHUB_WEBHOOK_SECRET`.
-- The `flaky_tests` view and the `flaky/` queries, which never needed the CI source.
 
 ## Tests
 
@@ -239,7 +234,7 @@ in `plugins/auth.ts`, `github_installations`), the GitHub adapter in `plugins/ci
 | Adapter guards, idempotency, artifact limits | `ingest/processCiRun.test.ts` |
 | Webhook writes `ci_source = 'github_actions'` | `routes/webhooks/github.test.ts` |
 | Uploads write the CI source, with and without `X-FH-CI-Source` | `routes/api/reports.test.ts` |
-| v1 upload, v2 upload without the header and one naming `github_actions` are one run | `api/versions.test.ts` |
+| An upload without the header and one naming `github_actions` are one run | `api/versions.test.ts` |
 | `findRepoByToken` returns the host | `auth/repoToken.test.ts` |
 | Migration 0003: fills old rows, no defaults, check constraints, new keys; migration 0004: keeps rows and keys | `db/schema.test.ts` |
 | Nested paths, a bare path on two hosts is a 400, a host-qualified path resolves | `api/resolveRepo.test.ts` |

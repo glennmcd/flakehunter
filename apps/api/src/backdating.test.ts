@@ -31,7 +31,7 @@ describe("X-FH-Timestamp through the real app", () => {
       const upload = (runId: number, headSha: string, xml: string, when: Date) =>
         app.inject({
           method: "POST",
-          url: "/api/reports",
+          url: "/api/v2/reports",
           headers: {
             authorization: `Bearer ${token}`,
             "content-type": "application/xml",
@@ -57,7 +57,7 @@ describe("X-FH-Timestamp through the real app", () => {
       // Default 30 day window: only the recent commit counts.
       const narrow = await app.inject({
         method: "GET",
-        url: `/api/tests/flaky?repo=${repo.id}&minRuns=1`,
+        url: `/api/v2/tests/flaky?repo=${repo.id}&minRuns=1`,
         headers: read,
       });
       expect(narrow.json().data[0]).toMatchObject({ shasRun: 1, flakyShas: 1 });
@@ -66,24 +66,24 @@ describe("X-FH-Timestamp through the real app", () => {
       const since = encodeURIComponent(daysAgo(60).toISOString());
       const wide = await app.inject({
         method: "GET",
-        url: `/api/tests/flaky?repo=${repo.id}&minRuns=1&since=${since}`,
+        url: `/api/v2/tests/flaky?repo=${repo.id}&minRuns=1&since=${since}`,
         headers: read,
       });
       const [item] = wide.json().data;
       expect(item).toMatchObject({ shasRun: 2, flakyShas: 2 });
 
       // Summary windows runs by their backdated time; lastRunAt is the newest run.
-      const summaryNarrow = await app.inject({ method: "GET", url: `/api/repos/${repo.id}/summary`, headers: read });
+      const summaryNarrow = await app.inject({ method: "GET", url: `/api/v2/repos/${repo.id}/summary`, headers: read });
       expect(summaryNarrow.json().totals).toMatchObject({ runs: 2, results: 2, flakyShas: 1 });
       const summaryWide = await app.inject({
         method: "GET",
-        url: `/api/repos/${repo.id}/summary?since=${since}`,
+        url: `/api/v2/repos/${repo.id}/summary?since=${since}`,
         headers: read,
       });
       expect(summaryWide.json().totals).toMatchObject({ runs: 4, results: 4, flakyShas: 2 });
 
       // History spans the weeks and is ordered by the given timestamps, newest first.
-      const history = await app.inject({ method: "GET", url: `/api/tests/${item.testId}/history`, headers: read });
+      const history = await app.inject({ method: "GET", url: `/api/v2/tests/${item.testId}/history`, headers: read });
       const times = history.json().data.map((d: { createdAt: string }) => new Date(d.createdAt).getTime());
       expect(times).toHaveLength(4);
       expect(times).toEqual([...times].sort((a, b) => b - a));

@@ -193,7 +193,7 @@ Configuration and registering it in Claude Code are in
 - One JUnit XML artifact per run is assumed (no multi-artifact merge), and only `workflow_run` `completed` events are
   handled.
 - Reads use a single static bearer token; upload tokens are per repo. There are no user accounts or OAuth.
-- `flaky_tests` is a live SQL view, not a materialized table.
+- Flaky status is computed on each query (`flaky/flakeRateQueries.ts`), not stored.
 
 # Part 2: Deploy to AWS
 

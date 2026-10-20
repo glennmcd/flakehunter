@@ -1,13 +1,12 @@
-import { idParamSchema, testHistoryQuerySchema, testHistoryResponseSchema, v2 } from "@flakehunter/shared-types";
+import { v2 } from "@flakehunter/shared-types";
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { errorResponses } from "../../api/errorResponses.js";
 import { ApiError } from "../../api/errors.js";
-import { toV1History } from "../../api/v1.js";
 import type { ApiRouteOptions } from "../../api/version.js";
 import { getTestHistory } from "../../history/testHistoryQueries.js";
 
-const testHistoryRoute: FastifyPluginAsync<ApiRouteOptions> = async (fastify, { apiVersion }) => {
+const testHistoryRoute: FastifyPluginAsync<ApiRouteOptions> = async (fastify) => {
   fastify.withTypeProvider<ZodTypeProvider>().get(
     "/tests/:id/history",
     {
@@ -15,12 +14,9 @@ const testHistoryRoute: FastifyPluginAsync<ApiRouteOptions> = async (fastify, { 
         tags: ["tests"],
         summary: "Get a test's history",
         description: "Results for one test, newest first. Never includes failure stack traces.",
-        params: idParamSchema,
-        querystring: testHistoryQuerySchema,
-        response: {
-          200: apiVersion === 1 ? testHistoryResponseSchema : v2.testHistoryResponseSchema,
-          ...errorResponses(400, 401, 404),
-        },
+        params: v2.idParamSchema,
+        querystring: v2.testHistoryQuerySchema,
+        response: { 200: v2.testHistoryResponseSchema, ...errorResponses(400, 401, 404) },
       },
     },
     async (request) => {
@@ -33,7 +29,7 @@ const testHistoryRoute: FastifyPluginAsync<ApiRouteOptions> = async (fastify, { 
         offset,
       });
       if (!history) throw new ApiError("not_found", `Test ${request.params.id} not found`);
-      return apiVersion === 1 ? toV1History(history) : history;
+      return history;
     },
   );
 };

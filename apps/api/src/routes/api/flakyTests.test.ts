@@ -205,18 +205,4 @@ describe("GET /tests/flaky repo paths", () => {
       await close();
     }
   });
-
-  it("v1 keeps accepting only owner/name, with no host prefix", async () => {
-    const { db, close, app } = await setup(1);
-    try {
-      await seedRepo(db, { externalRepoId: 2, owner: "group/sub", name: "project" });
-      const nested = await app.inject({ method: "GET", url: "/api/tests/flaky?repo=group/sub/project" });
-      expect(nested.statusCode).toBe(400);
-      // Taken as the owner "github:acme", which no repository has.
-      const qualified = await app.inject({ method: "GET", url: "/api/tests/flaky?repo=github:acme/widgets" });
-      expect(qualified.statusCode).toBe(404);
-    } finally {
-      await close();
-    }
-  });
 });

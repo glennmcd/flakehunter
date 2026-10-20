@@ -1,12 +1,6 @@
 import { z } from "zod";
 import { REPO_HOSTS, type RepoHost } from "../../domain";
-import {
-  flakyTestsQuerySchema as v1FlakyTestsQuerySchema,
-  testFailureItemSchema as v1TestFailureItemSchema,
-  testFailuresResponseSchema as v1TestFailuresResponseSchema,
-  testHistoryItemSchema as v1TestHistoryItemSchema,
-  testHistoryResponseSchema as v1TestHistoryResponseSchema,
-} from "../tests";
+import { pageSchema, paginationQuerySchema, testStatusSchema } from "../common";
 import { ciSourceSchema } from "./common";
 
 const PATH = /^[^/\s:]+(\/[^/\s:]+)+$/;
@@ -41,7 +35,11 @@ export const repoRefSchema = z
     return z.NEVER;
   });
 
-export const flakyTestsQuerySchema = v1FlakyTestsQuerySchema.extend({ repo: repoRefSchema });
+export const flakyTestsQuerySchema = paginationQuerySchema.extend({
+  repo: repoRefSchema,
+  since: z.iso.datetime({ offset: true }).optional(),
+  minRuns: z.coerce.number().int().min(1).default(5),
+});
 
 const runSchema = z.object({
   id: z.number().int(),
@@ -52,11 +50,41 @@ const runSchema = z.object({
   htmlUrl: z.string().nullable(),
 });
 
-export const testHistoryItemSchema = v1TestHistoryItemSchema.extend({ run: runSchema });
-export const testFailureItemSchema = v1TestFailureItemSchema.extend({ run: runSchema });
+const testSchema = z.object({
+  id: z.number().int(),
+  repoId: z.number().int(),
+  classname: z.string(),
+  name: z.string(),
+});
 
-export const testHistoryResponseSchema = v1TestHistoryResponseSchema.extend({ data: z.array(testHistoryItemSchema) });
+export const testHistoryItemSchema = z.object({
+  resultId: z.number().int(),
+  status: testStatusSchema,
+  headSha: z.string(),
+  headBranch: z.string().nullable(),
+  occurrenceIndex: z.number().int(),
+  durationSeconds: z.number().nullable(),
+  failureMessage: z.string().nullable(),
+  createdAt: z.string(),
+  run: runSchema,
+});
+
+export const testFailureItemSchema = z.object({
+  resultId: z.number().int(),
+  status: z.enum(["failed", "error"]),
+  headSha: z.string(),
+  headBranch: z.string().nullable(),
+  failureMessage: z.string().nullable(),
+  createdAt: z.string(),
+  run: runSchema,
+});
+
+export const testHistoryResponseSchema = z.object({
+  test: testSchema,
+  data: z.array(testHistoryItemSchema),
+  page: pageSchema,
+});
 export type TestHistoryResponse = z.infer<typeof testHistoryResponseSchema>;
 
-export const testFailuresResponseSchema = v1TestFailuresResponseSchema.extend({ data: z.array(testFailureItemSchema) });
+export const testFailuresResponseSchema = z.object({ test: testSchema, data: z.array(testFailureItemSchema) });
 export type TestFailuresResponse = z.infer<typeof testFailuresResponseSchema>;

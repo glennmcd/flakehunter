@@ -1,7 +1,7 @@
 import { gzipSync } from "node:zlib";
 import { DEFAULT_DEMO_SEED, type DemoRun } from "./generateRuns.js";
 
-// Uploads generated demo runs through POST /api/reports. Only node built-ins and global fetch are used, because
+// Uploads generated demo runs through POST /api/v2/reports. Only node built-ins and global fetch are used, because
 // scripts at the repo root cannot resolve the API's dependencies.
 
 export interface SeedConfig {
@@ -79,7 +79,7 @@ export function uploadHeaders(request: UploadRequest, token: string): Record<str
  * which keeps large histories under the request size limit of an API behind AWS Lambda.
  */
 export function httpUploader(baseUrl: string, token: string, fetchFn: typeof fetch = fetch): Uploader {
-  const url = `${baseUrl.replace(/\/+$/, "")}/api/reports`;
+  const url = `${baseUrl.replace(/\/+$/, "")}/api/v2/reports`;
   return async (request) => {
     const response = await fetchFn(url, {
       method: "POST",

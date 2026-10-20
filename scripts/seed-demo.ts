@@ -31,7 +31,7 @@ if (config.dryRun) {
   process.exit(0);
 }
 
-console.log(`Uploading to ${config.apiUrl}/api/reports ...`);
+console.log(`Uploading to ${config.apiUrl}/api/v2/reports ...`);
 try {
   const summary = await seedDemo(runs, httpUploader(config.apiUrl, config.token), {
     onProgress: (done, total) => {
