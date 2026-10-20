@@ -1,9 +1,13 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 
-/** Major versions of the published API. v1 is served under /api, v2 under /api/v2 (docs/plans/api-v2.md). */
-export type ApiVersion = 1 | 2;
+/**
+ * Major versions of the published API, each under `/api/v<n>`. Only v2 is served; v1 (`/api`) was removed once every
+ * first-party consumer had moved (docs/decisions/0012-api-v2-alongside-v1.md). A breaking change adds the next version
+ * here and is served next to the current one (docs/decisions/0010-openapi-published-contract.md).
+ */
+export type ApiVersion = 2;
 
-export const API_VERSIONS: readonly ApiVersion[] = [1, 2];
+export const API_VERSIONS: readonly ApiVersion[] = [2];
 
 /** Options every versioned route plugin is registered with, once per version. */
 export interface ApiRouteOptions {
@@ -11,27 +15,15 @@ export interface ApiRouteOptions {
 }
 
 /** Where each version's OpenAPI document and docs page are served. */
-export const SPEC_URLS: Record<ApiVersion, string> = { 1: "/openapi.json", 2: "/openapi.v2.json" };
-export const DOCS_URLS: Record<ApiVersion, string> = { 1: "/docs", 2: "/docs/v2" };
+export const SPEC_URLS: Record<ApiVersion, string> = { 2: "/openapi.v2.json" };
+export const DOCS_URLS: Record<ApiVersion, string> = { 2: "/docs/v2" };
 
-/** The URL prefix of a version's mount: `/api` for v1, `/api/v2` for v2. */
+/** The URL prefix of a version's mount, e.g. `/api/v2`. */
 export function apiPrefix(version: ApiVersion): string {
-  return version === 1 ? "/api" : `/api/v${version}`;
+  return `/api/v${version}`;
 }
 
-/** When v1 was deprecated in favour of v2. Sent in the RFC 9745 `Deprecation` header of every v1 response. */
-export const V1_DEPRECATED_AT = new Date("2026-10-19T00:00:00Z");
-
-/** The headers on every v1 response, errors and 429s included: the deprecation date and where v2 is. */
-export const V1_DEPRECATION_HEADERS = {
-  deprecation: `@${Math.floor(V1_DEPRECATED_AT.getTime() / 1000)}`,
-  link: `<${SPEC_URLS[2]}>; rel="successor-version", <${DOCS_URLS[2]}>; rel="deprecation"`,
-} as const;
-
-/**
- * Mounts one version's route plugins under its prefix, in their own encapsulated context. For v1 that context also
- * gets the onSend hook that adds V1_DEPRECATION_HEADERS, so the headers reach every v1 route and nothing else.
- */
+/** Mounts one version's route plugins under its prefix, in their own encapsulated context. */
 export async function registerApiVersion(
   fastify: FastifyInstance,
   apiVersion: ApiVersion,
@@ -39,12 +31,6 @@ export async function registerApiVersion(
 ): Promise<void> {
   await fastify.register(
     async (scope) => {
-      if (apiVersion === 1) {
-        scope.addHook("onSend", async (_request, reply, payload) => {
-          reply.headers(V1_DEPRECATION_HEADERS);
-          return payload;
-        });
-      }
       for (const plugin of plugins) {
         await scope.register(plugin, { apiVersion });
       }

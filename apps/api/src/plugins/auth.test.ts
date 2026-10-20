@@ -21,7 +21,7 @@ async function buildApp() {
   app.get("/health", async () => ({ ok: true }));
   app.get("/protected", async () => ({ ok: true }));
   for (const path of ["/api/reports", "/api/v2/reports"]) app.post(path, async () => ({ ok: true }));
-  for (const path of ["/openapi.json", "/openapi.v2.json", "/docs", "/docs/v2", "/api/repos", "/api/v2/repos"]) {
+  for (const path of ["/openapi.json", "/openapi.v2.json", "/docs", "/docs/v2", "/api/v2/repos"]) {
     app.get(path, async () => ({ ok: true }));
   }
   app.post("/webhooks/github", async () => ({ ok: true }));
@@ -46,22 +46,25 @@ describe("global auth hook", () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it("exempts /health, /webhooks/github and /api/reports (which does its own per-repo auth)", async () => {
+  it("exempts /health, /webhooks/github and /api/v2/reports (which does its own per-repo auth)", async () => {
     const app = await buildApp();
     expect((await app.inject({ method: "GET", url: "/health" })).statusCode).toBe(200);
     expect((await app.inject({ method: "POST", url: "/webhooks/github" })).statusCode).toBe(200);
-    expect((await app.inject({ method: "POST", url: "/api/reports?x=1" })).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: "/api/v2/reports?x=1" })).statusCode).toBe(200);
   });
 
-  it("exempts the upload route, the spec and the docs page of both API versions, and nothing else under them", async () => {
+  it("exempts the v2 spec, its docs page and the /docs redirect, and nothing else", async () => {
     const app = await buildApp();
-    expect((await app.inject({ method: "POST", url: "/api/v2/reports?x=1" })).statusCode).toBe(200);
-    for (const url of ["/openapi.json", "/openapi.v2.json", "/docs", "/docs/v2"]) {
+    for (const url of ["/openapi.v2.json", "/docs", "/docs/v2"]) {
       expect((await app.inject({ method: "GET", url })).statusCode).toBe(200);
     }
-    for (const url of ["/api/repos", "/api/v2/repos"]) {
-      expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
-    }
+    expect((await app.inject({ method: "GET", url: "/api/v2/repos" })).statusCode).toBe(401);
+  });
+
+  it("no longer exempts the removed v1 upload route or v1 spec", async () => {
+    const app = await buildApp();
+    expect((await app.inject({ method: "POST", url: "/api/reports" })).statusCode).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/openapi.json" })).statusCode).toBe(401);
   });
 
   it("does not exempt lookalike paths", async () => {

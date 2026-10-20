@@ -1,4 +1,4 @@
-import type { RepoItem } from "@flakehunter/shared-types";
+import type { v2 } from "@flakehunter/shared-types";
 import type { ApiClient } from "./api";
 import { describeError, type ErrorView } from "./errors";
 
@@ -7,7 +7,7 @@ export const REPO_LIST_LIMIT = 100;
 
 export type HomeResult =
   | { kind: "redirect"; repoId: number }
-  | { kind: "list"; repos: RepoItem[]; total: number }
+  | { kind: "list"; repos: v2.RepoItem[]; total: number }
   | { kind: "error"; error: ErrorView };
 
 /**

@@ -8,7 +8,7 @@ import { DEMO_TESTS, type DemoTest, testKey } from "./catalog.js";
 import { DEFAULT_DEMO_SEED, generateDemoRuns } from "./generateRuns.js";
 import { seedDemo, type UploadRequest, type UploadResponse, uploadHeaders } from "./seedDemo.js";
 
-// The real thing end to end: generated runs go through POST /api/reports into a PGlite database, and the read
+// The real thing end to end: generated runs go through POST /api/v2/reports into a PGlite database, and the read
 // endpoints must agree with what the generator says it produced.
 
 const API_TOKEN = "test-global-api-token";
@@ -42,7 +42,7 @@ describe("seeding the demo through the real ingestion path", () => {
       const upload = async (req: UploadRequest): Promise<UploadResponse> => {
         const res = await app.inject({
           method: "POST",
-          url: "/api/reports",
+          url: "/api/v2/reports",
           headers: uploadHeaders(req, token),
           payload: req.xml,
         });
@@ -90,7 +90,7 @@ describe("seeding the demo through the real ingestion path", () => {
       // The ranking: exactly the six flaky tests, with the counts the generator implies.
       const ranking = await app.inject({
         method: "GET",
-        url: `/api/tests/flaky?repo=${repo.id}&since=${since}&minRuns=1&limit=200`,
+        url: `/api/v2/tests/flaky?repo=${repo.id}&since=${since}&minRuns=1&limit=200`,
         headers: read,
       });
       expect(ranking.statusCode).toBe(200);
@@ -124,7 +124,7 @@ describe("seeding the demo through the real ingestion path", () => {
       // The summary agrees on volume, pass rate and flaky counts.
       const summary = await app.inject({
         method: "GET",
-        url: `/api/repos/${repo.id}/summary?since=${since}`,
+        url: `/api/v2/repos/${repo.id}/summary?since=${since}`,
         headers: read,
       });
       const body = summary.json();
@@ -141,7 +141,7 @@ describe("seeding the demo through the real ingestion path", () => {
       // History for the flakiest test spans weeks (the timestamps were honoured), newest first.
       const history = await app.inject({
         method: "GET",
-        url: `/api/tests/${ranked[0]?.testId}/history?limit=200&since=${since}`,
+        url: `/api/v2/tests/${ranked[0]?.testId}/history?limit=200&since=${since}`,
         headers: read,
       });
       const times = (history.json().data as { createdAt: string }[]).map((d) => new Date(d.createdAt).getTime());
@@ -155,7 +155,7 @@ describe("seeding the demo through the real ingestion path", () => {
       expect(second).toEqual({ uploads: totalReports, created: 0, duplicates: totalReports, retries: 0 });
       const again = await app.inject({
         method: "GET",
-        url: `/api/repos/${repo.id}/summary?since=${since}`,
+        url: `/api/v2/repos/${repo.id}/summary?since=${since}`,
         headers: read,
       });
       expect(again.json()).toEqual(body);

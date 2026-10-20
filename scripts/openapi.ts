@@ -1,14 +1,14 @@
-// Writes (default) or checks (--check) docs/openapi.json (v1) and docs/openapi.v2.json, the committed OpenAPI documents
+// Writes (default) or checks (--check) the committed OpenAPI document of each API version (docs/openapi.v2.json),
 // generated from the routes.
 import { readFileSync, writeFileSync } from "node:fs";
 import { buildSpecTexts } from "../apps/api/src/openapi/buildSpec";
 
-const files = { 1: "docs/openapi.json", 2: "docs/openapi.v2.json" } as const;
+const files = { 2: "docs/openapi.v2.json" } as const;
 const specs = await buildSpecTexts();
 const check = process.argv.includes("--check");
 
 let stale = false;
-for (const version of [1, 2] as const) {
+for (const version of [2] as const) {
   const name = files[version];
   const file = new URL(`../${name}`, import.meta.url);
   if (check) {

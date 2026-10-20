@@ -1,6 +1,7 @@
 # API v2 alongside v1
 
-**Status:** Draft, for review. No code changes until this is agreed.
+**Status:** Implemented, and v1 has since been retired ([ADR 0012](../decisions/0012-api-v2-alongside-v1.md)). The
+plan below is kept as agreed; `CLAUDE.md` ("API versions") describes the current code.
 
 This plan serves a provider-neutral API v2 under `/api/v2`, next to the existing `/api` (v1), as
 [ADR 0010](../decisions/0010-openapi-published-contract.md) requires for a breaking change. Both versions run from the

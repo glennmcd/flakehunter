@@ -1,23 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { paginationQuerySchema } from "./common";
-import { uploadReportHeadersSchema } from "./reports";
-import { flakyTestsQuerySchema, repoRefSchema } from "./tests";
-
-describe("repoRefSchema", () => {
-  it("parses a numeric id", () => {
-    expect(repoRefSchema.parse("12")).toEqual({ id: 12 });
-  });
-
-  it("parses owner/name", () => {
-    expect(repoRefSchema.parse("acme/widgets")).toEqual({ fullName: "acme/widgets" });
-  });
-
-  it("rejects junk", () => {
-    for (const bad of ["", "acme", "a/b/c", "has space/x", "12abc"]) {
-      expect(repoRefSchema.safeParse(bad).success).toBe(false);
-    }
-  });
-});
+import { flakyTestsQuerySchema, uploadReportHeadersSchema } from "./v2/index";
 
 describe("uploadReportHeadersSchema", () => {
   const base = { "x-fh-run-id": "987", "x-fh-sha": "a".repeat(40) };

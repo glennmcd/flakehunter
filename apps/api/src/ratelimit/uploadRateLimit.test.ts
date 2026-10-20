@@ -43,10 +43,10 @@ async function setup(max: number) {
     logger: false,
     rateLimit: { store: new MemoryRateLimitStore(), max, windowSeconds: 60 },
   });
-  const upload = (runId: number, bearer = token, ip = "203.0.113.10", url = "/api/reports") =>
+  const upload = (runId: number, bearer = token, ip = "203.0.113.10") =>
     app.inject({
       method: "POST",
-      url,
+      url: "/api/v2/reports",
       remoteAddress: ip,
       headers: {
         authorization: `Bearer ${bearer}`,
@@ -59,7 +59,7 @@ async function setup(max: number) {
   return { app, token, upload, counter, close };
 }
 
-describe("rate limit on POST /api/reports, through buildApp", () => {
+describe("rate limit on POST /api/v2/reports, through buildApp", () => {
   it("accepts uploads up to the limit, then answers 429 with Retry-After", async () => {
     const { upload, close } = await setup(2);
     try {
@@ -69,18 +69,6 @@ describe("rate limit on POST /api/reports, through buildApp", () => {
       expect(limited.statusCode).toBe(429);
       expect(limited.json<unknown>()).toMatchObject({ error: { code: "rate_limited" } });
       expect(Number(limited.headers["retry-after"])).toBeGreaterThanOrEqual(1);
-    } finally {
-      await close();
-    }
-  });
-
-  it("counts uploads to /api/reports and /api/v2/reports against one budget", async () => {
-    const { upload, close } = await setup(2);
-    try {
-      expect((await upload(1)).statusCode).toBe(201);
-      expect((await upload(2, undefined, undefined, "/api/v2/reports")).statusCode).toBe(201);
-      expect((await upload(3, undefined, undefined, "/api/v2/reports")).statusCode).toBe(429);
-      expect((await upload(4)).statusCode).toBe(429);
     } finally {
       await close();
     }
@@ -107,7 +95,7 @@ describe("rate limit on POST /api/reports, through buildApp", () => {
         expect((await app.inject({ method: "GET", url: "/health" })).statusCode).toBe(200);
         const read = await app.inject({
           method: "GET",
-          url: "/api/repos",
+          url: "/api/v2/repos",
           headers: { authorization: `Bearer ${API_TOKEN}` },
         });
         expect(read.statusCode).toBe(200);
@@ -138,7 +126,7 @@ describe("rate limit on POST /api/reports, through buildApp", () => {
       const send = () =>
         app.inject({
           method: "POST",
-          url: "/api/reports",
+          url: "/api/v2/reports",
           headers: { authorization: "Bearer fh_guess", "content-type": "application/xml" },
           payload: big,
         });

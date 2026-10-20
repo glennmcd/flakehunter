@@ -6,7 +6,7 @@ import { DynamoRateLimitStore, MemoryRateLimitStore, type RateLimitStore } from 
 
 declare module "fastify" {
   interface FastifyInstance {
-    /** onRequest hook for POST /api/reports that counts uploads per token (or IP) and answers 429 over the limit. */
+    /** onRequest hook for POST /api/v2/reports that counts uploads per token (or IP) and answers 429 over the limit. */
     uploadRateLimit: onRequestAsyncHookHandler;
   }
 }

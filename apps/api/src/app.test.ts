@@ -29,7 +29,7 @@ async function setup() {
   const upload = (runId: number, xml: string, who = token) =>
     app.inject({
       method: "POST",
-      url: "/api/reports",
+      url: "/api/v2/reports",
       headers: {
         authorization: `Bearer ${who}`,
         "content-type": "application/xml",
@@ -41,7 +41,7 @@ async function setup() {
   return { db, close, repo, token, app, read, upload };
 }
 
-describe("v1 API, wired through buildApp", () => {
+describe("API v2, wired through buildApp", () => {
   it("surfaces a test as flaky after a pass and a fail upload on the same commit", async () => {
     const { close, repo, app, read, upload } = await setup();
     try {
@@ -54,7 +54,7 @@ describe("v1 API, wired through buildApp", () => {
 
       const flaky = await app.inject({
         method: "GET",
-        url: "/api/tests/flaky?repo=acme/widgets&minRuns=1",
+        url: "/api/v2/tests/flaky?repo=acme/widgets&minRuns=1",
         headers: read,
       });
       expect(flaky.statusCode).toBe(200);
@@ -62,7 +62,7 @@ describe("v1 API, wired through buildApp", () => {
       expect(flaky.json().page.total).toBe(1);
       expect(item).toMatchObject({ name: "maybe flaky", shasRun: 1, flakyShas: 1, flakeRate: 1 });
 
-      const summary = await app.inject({ method: "GET", url: `/api/repos/${repo.id}/summary`, headers: read });
+      const summary = await app.inject({ method: "GET", url: `/api/v2/repos/${repo.id}/summary`, headers: read });
       expect(summary.json().totals).toEqual({
         runs: 2,
         tests: 1,
@@ -72,7 +72,7 @@ describe("v1 API, wired through buildApp", () => {
         flakyShas: 1,
       });
 
-      const history = await app.inject({ method: "GET", url: `/api/tests/${item.testId}/history`, headers: read });
+      const history = await app.inject({ method: "GET", url: `/api/v2/tests/${item.testId}/history`, headers: read });
       expect(history.json().page.total).toBe(2);
       expect(
         history
@@ -80,11 +80,6 @@ describe("v1 API, wired through buildApp", () => {
           .data.map((d: { status: string }) => d.status)
           .sort(),
       ).toEqual(["failed", "passed"]);
-
-      // The week-1 view-backed route sees the same data.
-      const legacy = await app.inject({ method: "GET", url: `/repos/${repo.id}/flaky-tests`, headers: read });
-      expect(legacy.statusCode).toBe(200);
-      expect(legacy.json()).toHaveLength(1);
     } finally {
       await close();
     }
@@ -94,12 +89,12 @@ describe("v1 API, wired through buildApp", () => {
     const { close, token, app, read, upload } = await setup();
     try {
       // Reads need the global token; a repo upload token is not accepted.
-      const noAuth = await app.inject({ method: "GET", url: "/api/tests/flaky?repo=1" });
+      const noAuth = await app.inject({ method: "GET", url: "/api/v2/tests/flaky?repo=1" });
       expect(noAuth.statusCode).toBe(401);
       expect(noAuth.json().error.code).toBe("unauthorized");
       const repoTokenRead = await app.inject({
         method: "GET",
-        url: "/api/tests/flaky?repo=1",
+        url: "/api/v2/tests/flaky?repo=1",
         headers: { authorization: `Bearer ${token}` },
       });
       expect(repoTokenRead.statusCode).toBe(401);
@@ -108,45 +103,37 @@ describe("v1 API, wired through buildApp", () => {
       expect((await upload(1, PASSING, API_TOKEN)).statusCode).toBe(401);
       expect((await upload(1, PASSING, "fh_unknown")).statusCode).toBe(401);
 
-      expect((await app.inject({ method: "GET", url: "/api/tests/flaky?repo=1", headers: read })).statusCode).toBe(200);
+      expect((await app.inject({ method: "GET", url: "/api/v2/tests/flaky?repo=1", headers: read })).statusCode).toBe(
+        200,
+      );
     } finally {
       await close();
     }
   });
 
-  it("leaves public and week-1 routes working with their original behaviour", async () => {
-    const { close, app, read } = await setup();
+  it("serves /health without a token", async () => {
+    const { close, app } = await setup();
     try {
       expect((await app.inject({ method: "GET", url: "/health" })).statusCode).toBe(200);
-
-      const repos = await app.inject({ method: "GET", url: "/repos", headers: read });
-      expect(repos.statusCode).toBe(200);
-      expect(repos.json()).toHaveLength(1);
-
-      const legacyBad = await app.inject({ method: "GET", url: "/repos/abc/flaky-tests", headers: read });
-      expect(legacyBad.statusCode).toBe(400);
-      expect(legacyBad.json<unknown>()).toEqual({ error: "invalid repo id" });
     } finally {
       await close();
     }
   });
 
-  it("serves GET /api/repos behind the global read token, next to the legacy /repos", async () => {
+  it("serves GET /api/v2/repos behind the global read token", async () => {
     const { close, token, app, read } = await setup();
     try {
-      expect((await app.inject({ method: "GET", url: "/api/repos" })).statusCode).toBe(401);
+      expect((await app.inject({ method: "GET", url: "/api/v2/repos" })).statusCode).toBe(401);
       expect(
-        (await app.inject({ method: "GET", url: "/api/repos", headers: { authorization: `Bearer ${token}` } }))
+        (await app.inject({ method: "GET", url: "/api/v2/repos", headers: { authorization: `Bearer ${token}` } }))
           .statusCode,
       ).toBe(401);
 
-      const res = await app.inject({ method: "GET", url: "/api/repos", headers: read });
+      const res = await app.inject({ method: "GET", url: "/api/v2/repos", headers: read });
       expect(res.statusCode).toBe(200);
       expect(res.json().data).toEqual([
-        { id: expect.any(Number), fullName: "acme/widgets", owner: "acme", name: "widgets" },
+        { id: expect.any(Number), fullName: "acme/widgets", owner: "acme", name: "widgets", host: "github" },
       ]);
-      // The legacy unprefixed route still answers.
-      expect((await app.inject({ method: "GET", url: "/repos", headers: read })).statusCode).toBe(200);
     } finally {
       await close();
     }
@@ -155,12 +142,12 @@ describe("v1 API, wired through buildApp", () => {
   it("returns the standard error body for validation errors and unknown routes", async () => {
     const { close, app, read } = await setup();
     try {
-      const bad = await app.inject({ method: "GET", url: "/api/tests/flaky", headers: read });
+      const bad = await app.inject({ method: "GET", url: "/api/v2/tests/flaky", headers: read });
       expect(bad.statusCode).toBe(400);
       expect(bad.json().error.code).toBe("validation_error");
       expect(bad.json().requestId).toBeTruthy();
 
-      const missing = await app.inject({ method: "GET", url: "/api/repos/999/summary", headers: read });
+      const missing = await app.inject({ method: "GET", url: "/api/v2/repos/999/summary", headers: read });
       expect(missing.statusCode).toBe(404);
       expect(missing.json().error.code).toBe("not_found");
     } finally {

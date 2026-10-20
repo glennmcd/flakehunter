@@ -7,13 +7,13 @@ import type { TestDb } from "./testDb.js";
 
 /**
  * Minimal app for route tests: zod compilers, the standard error handler and a PGlite db, with each route
- * plugin mounted for one API version (v1 under /api by default) by registerApiVersion, as routes/index.ts does. The global
- * Bearer auth hook is intentionally not registered; it is covered in plugins/auth.test.ts.
+ * plugin mounted for one API version (v2 under /api/v2 by default) by registerApiVersion, as routes/index.ts
+ * does. The global Bearer auth hook is intentionally not registered; it is covered in plugins/auth.test.ts.
  */
 export async function buildApiApp(
   db: TestDb,
   routes: FastifyPluginAsync<ApiRouteOptions>[],
-  apiVersion: ApiVersion = 1,
+  apiVersion: ApiVersion = 2,
 ) {
   const app = Fastify();
   app.setValidatorCompiler(validatorCompiler);

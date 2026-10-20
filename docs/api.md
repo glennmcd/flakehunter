@@ -3,10 +3,10 @@
 How CI sends test reports to FlakeHunter, and the read endpoints the dashboard and the MCP server use. To run the API
 itself, see [deployment.md](deployment.md).
 
-The current API is v2, under `/api/v2`. Its machine-readable contract is [openapi.v2.json](openapi.v2.json), also
-served publicly at `/openapi.v2.json`, with a browsable page at `/docs/v2`. v1, under `/api`, is deprecated (see
-[API v1](#api-v1-deprecated)); its contract is [openapi.json](openapi.json), at `/openapi.json` and `/docs`. Both are
-generated from the routes (`bun run openapi:generate`) and CI fails if either committed copy is stale.
+The API is v2, under `/api/v2`. Its machine-readable contract is [openapi.v2.json](openapi.v2.json), also served
+publicly at `/openapi.v2.json`, with a browsable page at `/docs/v2` (`/docs` redirects there). It is generated from
+the routes (`bun run openapi:generate`) and CI fails if the committed copy is stale. v1, under `/api`, has been
+removed (see [API v1](#api-v1-removed)).
 
 The commands below are bash commands, run from the repository root (on Windows, use Git Bash).
 
@@ -121,25 +121,11 @@ Every error, in either version, has the same shape:
 Codes: `validation_error` (400), `unauthorized` (401), `not_found` (404), `payload_too_large` (413),
 `invalid_report` (422), `rate_limited` (429, with `Retry-After`), `internal_error` (500). `details` appears only on validation errors.
 
-## API v1 (deprecated)
+## API v1 (removed)
 
-v1 is the same API under `/api` (`POST /api/reports`, `GET /api/repos` and so on). It is removed once every
-first-party consumer uses v2 ([ADR 0012](decisions/0012-api-v2-alongside-v1.md)). Both versions share the same data:
-a run uploaded through one is a duplicate through the other. They differ only here:
-
-| | v1 (`/api`) | v2 (`/api/v2`) |
-| --- | --- | --- |
-| CI run id in `run` objects | `githubRunId` | `ciRunId` |
-| CI system of a run | not shown | `run.ciSource` |
-| Host of a repository | not shown | `host` on each `GET /api/v2/repos` item |
-| CI source of an upload | always the host's own CI; `X-FH-CI-Source` is ignored | `X-FH-CI-Source`, defaulting to the host's own CI |
-| `repo` parameter | numeric id or `owner/name` | numeric id or `[host:]path` |
-
-Every v1 response, errors included, carries the RFC 9745 deprecation headers:
-
-```http
-Deprecation: @1792368000
-Link: </openapi.v2.json>; rel="successor-version", </docs/v2>; rel="deprecation"
-```
+v1 was the same API under `/api` (`POST /api/reports`, `GET /api/repos` and so on), with its contract at
+`/openapi.json`. It was removed once the dashboard, the MCP server and flakehunter-airflow had moved to v2
+([ADR 0012](decisions/0012-api-v2-alongside-v1.md)); its paths now return 404. Runs uploaded through v1 are still there
+and show in v2.
 
 To move a client, change the prefix to `/api/v2` and read `run.ciRunId` instead of `run.githubRunId`.

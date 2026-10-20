@@ -47,21 +47,12 @@ describe("route registry", () => {
     }
   });
 
-  it("serves every endpoint the API had under autoload, and each /api route again under /api/v2", async () => {
+  it("serves health, the webhook and each published route under /api/v2", async () => {
     const { db, close } = await createTestDb();
     const app = await buildApp({ db, logger: false });
     try {
       const expected: [string, string][] = [
         ["GET", "/health"],
-        ["GET", "/repos"],
-        ["GET", "/repos/:id/flaky-tests"],
-        ["GET", "/repos/:id/runs"],
-        ["GET", "/repos/:id/tests/:testCaseId/results"],
-        ["GET", "/api/repos"],
-        ["GET", "/api/repos/:id/summary"],
-        ["GET", "/api/tests/flaky"],
-        ["GET", "/api/tests/:id/history"],
-        ["POST", "/api/reports"],
         ["GET", "/api/v2/repos"],
         ["GET", "/api/v2/repos/:id/summary"],
         ["GET", "/api/v2/tests/flaky"],
@@ -87,6 +78,12 @@ describe("route registry", () => {
       expect(app.hasRoute({ method: "POST", url: "/github" })).toBe(false);
       expect(app.hasRoute({ method: "POST", url: "/reports" })).toBe(false);
       expect(app.hasRoute({ method: "GET", url: "/tests/flaky" })).toBe(false);
+      // API v1 (/api) and the week-1 root routes were removed.
+      for (const url of ["/api/repos", "/api/tests/flaky", "/repos", "/repos/:id/flaky-tests", "/repos/:id/runs"]) {
+        expect(app.hasRoute({ method: "GET", url })).toBe(false);
+      }
+      expect(app.hasRoute({ method: "GET", url: "/repos/:id/tests/:testCaseId/results" })).toBe(false);
+      expect(app.hasRoute({ method: "POST", url: "/api/reports" })).toBe(false);
       // Only published API routes get a v2 mount.
       expect(app.hasRoute({ method: "POST", url: "/api/v2/webhooks/github" })).toBe(false);
       expect(app.hasRoute({ method: "GET", url: "/api/v2/health" })).toBe(false);

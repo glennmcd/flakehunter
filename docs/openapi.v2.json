@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FlakeHunter API",
-    "version": "2.0.0",
+    "version": "2.0.1",
     "description": "Ingests JUnit XML reports and reports flaky tests. A test is flaky on a commit when it has both a pass and a fail (or error) on the same commit SHA. Every error uses the same body: `{ error: { code, message, details? }, requestId }`. Lists take `?limit=&offset=` and return `{ data, page: { limit, offset, total } }`."
   },
   "components": {
@@ -703,7 +703,7 @@
         "tags": [
           "reports"
         ],
-        "description": "Authenticated with a per-repository upload token (not the read token); the repository comes from the token. X-FH-CI-Source names the CI system that ran the tests and defaults to the host's own (github_actions for GitHub), so an upload without it is the same run as a v1 upload. Idempotent on (CI source, run id, attempt, report key): the first upload returns 201, a repeat returns 200 with the original counts. A SHA that contradicts an existing run is a 400. Unparseable bodies or reports with no testsuite are 422 (invalid_report) and store nothing. Rate limited per IP and per token (429 with Retry-After).",
+        "description": "Authenticated with a per-repository upload token (not the read token); the repository comes from the token. X-FH-CI-Source names the CI system that ran the tests and defaults to the host's own (github_actions for GitHub). Idempotent on (CI source, run id, attempt, report key): the first upload returns 201, a repeat returns 200 with the original counts. A SHA that contradicts an existing run is a 400. Unparseable bodies or reports with no testsuite are 422 (invalid_report) and store nothing. Rate limited per IP and per token (429 with Retry-After).",
         "parameters": [
           {
             "schema": {

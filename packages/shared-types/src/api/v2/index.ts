@@ -1,6 +1,6 @@
 /**
- * API v2 schemas (/api/v2, docs/openapi.v2.json). The ones v2 changes are defined here; the rest are v1's, re-exported
- * so that `v2.*` is the whole contract.
+ * API v2 schemas (/api/v2, docs/openapi.v2.json). The ones that name a CI run, CI source or host are defined here; the
+ * rest live one level up and are re-exported, so that `v2.*` is the whole contract.
  */
 export {
   type ApiErrorCode,

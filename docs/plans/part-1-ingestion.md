@@ -31,8 +31,8 @@ Ingest JUnit XML from GitHub Actions through a webhook, store it in Postgres and
 
 Built as planned. The end-to-end check runs against the fixture repo `glennmcd/flakehunter-test-fixture`, whose
 "maybe flaky test" fails about half the time. The plain repo webhook with a PAT (the plan's fallback) was used instead
-of a GitHub App. The routes from this part (`/repos`, `/flaky`, `/runs`, `/tests`) still exist but no longer have a
-caller since Part 3's dashboard uses the Part 2 API.
+of a GitHub App. The routes from this part (`/repos`, `/flaky`, `/runs`, `/tests`) lost their last caller when Part
+3's dashboard moved to the Part 2 API. They were removed, with the `flaky_tests` view, when API v1 was retired.
 
 ## Decisions
 

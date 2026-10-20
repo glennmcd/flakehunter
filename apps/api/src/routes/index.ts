@@ -6,11 +6,7 @@ import repoSummaryRoute from "./api/repoSummary.js";
 import apiReposRoute from "./api/repos.js";
 import testFailuresRoute from "./api/testFailures.js";
 import testHistoryRoute from "./api/testHistory.js";
-import flakyRoute from "./flaky.js";
 import healthRoute from "./health.js";
-import reposRoute from "./repos.js";
-import runsRoute from "./runs.js";
-import testResultsRoute from "./tests.js";
 import githubWebhookRoute from "./webhooks/github.js";
 
 interface RouteModuleBase {
@@ -32,17 +28,13 @@ export type RouteModule =
 /**
  * Every route plugin, registered explicitly instead of with @fastify/autoload: autoload imports files from disk at
  * runtime, which a bundler (esbuild for Lambda) cannot see, so the routes would be missing from the bundle.
- * The prefixes are the ones autoload derived from the directory names: files in routes/api/ live under /api and
- * routes/webhooks/github.ts under /webhooks. Files in routes/api/ are also mounted at /api/v2: the same plugin,
- * registered again with `apiVersion: 2`; each version's plugins share one context (registerApiVersion), which for v1
- * adds the deprecation headers. Adding a route file means adding a line here; routes.test.ts fails if one is forgotten.
+ * The prefixes are the ones autoload derived from the directory names: routes/webhooks/github.ts under /webhooks, and
+ * files in routes/api/ under /api. Those are the published API: each is mounted once per version at
+ * `apiPrefix(version)` (/api/v2), and each version's plugins share one context (registerApiVersion). Adding a route
+ * file means adding a line here; routes.test.ts fails if one is forgotten.
  */
 export const routeModules: RouteModule[] = [
   { file: "health", plugin: healthRoute, prefix: "" },
-  { file: "flaky", plugin: flakyRoute, prefix: "" },
-  { file: "repos", plugin: reposRoute, prefix: "" },
-  { file: "runs", plugin: runsRoute, prefix: "" },
-  { file: "tests", plugin: testResultsRoute, prefix: "" },
   { file: "api/flakyTests", plugin: flakyTestsRoute, prefix: "/api", versions: API_VERSIONS },
   { file: "api/repoSummary", plugin: repoSummaryRoute, prefix: "/api", versions: API_VERSIONS },
   { file: "api/reports", plugin: reportsRoute, prefix: "/api", versions: API_VERSIONS },

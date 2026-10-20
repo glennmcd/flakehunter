@@ -122,7 +122,7 @@ export function sha(n: number): string {
   return n.toString(16).padStart(40, "0");
 }
 
-/** How a `run` object names its CI run in each API version: v1 `githubRunId`, v2 `ciRunId` with the CI source. */
-export function runIdentity(apiVersion: ApiVersion, ciRunId: unknown, ciSource: CiSource = "github_actions") {
-  return apiVersion === 1 ? { githubRunId: ciRunId } : { ciRunId, ciSource };
+/** How a `run` object names its CI run in an API version (v2: `ciRunId` with the CI source). */
+export function runIdentity(_apiVersion: ApiVersion, ciRunId: unknown, ciSource: CiSource = "github_actions") {
+  return { ciRunId, ciSource };
 }

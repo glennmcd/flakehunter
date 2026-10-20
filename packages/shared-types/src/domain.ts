@@ -14,7 +14,7 @@ export const DEFAULT_CI_SOURCE: Readonly<Record<RepoHost, CiSource>> = { github:
 export interface Repo {
   id: number;
   host: RepoHost;
-  githubRepoId: number;
+  externalRepoId: number;
   owner: string;
   name: string;
   fullName: string;
@@ -25,8 +25,8 @@ export interface WorkflowRun {
   id: number;
   repoId: number;
   ciSource: CiSource;
-  githubRunId: number;
-  githubRunAttempt: number;
+  ciRunId: number;
+  runAttempt: number;
   workflowName: string;
   headSha: string;
   headBranch: string | null;

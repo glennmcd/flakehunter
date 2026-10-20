@@ -4,6 +4,7 @@ import { strToU8, zipSync } from "fflate";
 import { createTestDb } from "../../test/testDb.js";
 import type { CiRepo, CiSource, CiSourceAdapter, RepoHost, ReportArtifact } from "../ci/types.js";
 import { reports, repos, workflowRuns } from "../db/schema.js";
+import { getFlakeRanking } from "../flaky/flakeRateQueries.js";
 import { ArtifactRejectedError, MAX_ARTIFACT_ZIP_BYTES } from "./limits.js";
 import { type CiRunInput, processCiRun } from "./processCiRun.js";
 
@@ -94,17 +95,16 @@ describe("processCiRun", () => {
       // Run 2, same SHA, different run id: the test fails this time.
       await processCiRun(db, fakeAdapter(failingZip), runInput(repo, { runId: 101, conclusion: "failure" }));
 
-      const { rows: flaky } = await db.execute(
-        sql`select classname, name, head_sha, pass_count, fail_count from flaky_tests`,
-      );
-      expect(flaky).toHaveLength(1);
-      expect(flaky[0]).toMatchObject({
-        classname: "pkg.Foo",
-        name: "flaky test",
-        head_sha: "abc123",
-        pass_count: 1,
-        fail_count: 1,
+      const flaky = await getFlakeRanking(db, {
+        repoId: repo.id,
+        since: new Date(0),
+        minRuns: 1,
+        limit: 10,
+        offset: 0,
       });
+      expect(flaky.data).toEqual([
+        expect.objectContaining({ classname: "pkg.Foo", name: "flaky test", shasRun: 1, flakyShas: 1, flakeRate: 1 }),
+      ]);
     });
   });
 

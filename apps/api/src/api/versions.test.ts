@@ -45,21 +45,30 @@ async function setup() {
   return { app, repo, upload, close };
 }
 
-describe("API v1 and v2 side by side", () => {
-  it.each([
-    ["/api/reports", "/api/v2/reports"],
-    ["/api/v2/reports", "/api/reports"],
-  ])("an upload to %s and the same run to %s are one report", async (first, second) => {
-    const { upload, close } = await setup();
+describe("the published API, through buildApp", () => {
+  it("no longer serves v1, its spec or the week-1 routes, and sends /docs to the v2 docs page", async () => {
+    const { app, repo, close } = await setup();
+    const read = { authorization: `Bearer ${API_TOKEN}` };
     try {
-      const created = await upload(first, 1);
-      expect(created.statusCode).toBe(201);
-      const repeated = await upload(second, 1);
-      expect(repeated.statusCode).toBe(200);
-      const [a, b] = [created.json(), repeated.json()];
-      expect(b.duplicate).toBe(true);
-      expect(b.run.id).toBe(a.run.id);
-      expect(b.counts).toEqual(a.counts);
+      for (const url of [
+        "/api/repos",
+        `/api/repos/${repo.id}/summary`,
+        `/api/tests/flaky?repo=${repo.id}`,
+        "/api/tests/1/history",
+        "/api/tests/1/failures",
+        "/repos",
+        `/repos/${repo.id}/flaky-tests`,
+        `/repos/${repo.id}/runs`,
+        `/repos/${repo.id}/tests/1/results`,
+        "/openapi.json",
+      ]) {
+        expect((await app.inject({ method: "GET", url, headers: read })).statusCode).toBe(404);
+      }
+      expect((await app.inject({ method: "POST", url: "/api/reports", headers: read })).statusCode).toBe(404);
+
+      const docs = await app.inject({ method: "GET", url: "/docs" });
+      expect(docs.statusCode).toBe(302);
+      expect(docs.headers.location).toBe("/docs/v2");
     } finally {
       await close();
     }
@@ -91,15 +100,13 @@ describe("API v1 and v2 side by side", () => {
     }
   });
 
-  it("takes a v1 upload, a v2 upload without X-FH-CI-Source and one naming github_actions as the same run", async () => {
+  it("takes an upload without X-FH-CI-Source and one naming github_actions as the same run", async () => {
     const { app, upload, close } = await setup();
     try {
-      const v1 = await upload("/api/reports", 3);
       const bare = await upload("/api/v2/reports", 3);
       const named = await upload("/api/v2/reports", 3, undefined, { "x-fh-ci-source": "github_actions" });
-      expect([v1.statusCode, bare.statusCode, named.statusCode]).toEqual([201, 200, 200]);
+      expect([bare.statusCode, named.statusCode]).toEqual([201, 200]);
       expect(named.json().run).toEqual(bare.json().run);
-      expect(bare.json().run.id).toBe(v1.json().run.id);
 
       const history = await app.inject({
         method: "GET",
