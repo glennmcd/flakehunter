@@ -1,5 +1,6 @@
 import type { CiSource, RepoHost } from "@flakehunter/shared-types";
 import { and, eq } from "drizzle-orm";
+import type { ApiVersion } from "../src/api/version.js";
 import { repos, testCases, testResults, testSuites, workflowRuns } from "../src/db/schema.js";
 import type { TestDb } from "./testDb.js";
 
@@ -119,4 +120,9 @@ export function daysAgo(days: number): Date {
 
 export function sha(n: number): string {
   return n.toString(16).padStart(40, "0");
+}
+
+/** How a `run` object names its CI run in each API version: v1 `githubRunId`, v2 `ciRunId` with the CI source. */
+export function runIdentity(apiVersion: ApiVersion, ciRunId: unknown, ciSource: CiSource = "github_actions") {
+  return apiVersion === 1 ? { githubRunId: ciRunId } : { ciRunId, ciSource };
 }

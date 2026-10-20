@@ -43,10 +43,10 @@ async function setup(max: number) {
     logger: false,
     rateLimit: { store: new MemoryRateLimitStore(), max, windowSeconds: 60 },
   });
-  const upload = (runId: number, bearer = token, ip = "203.0.113.10") =>
+  const upload = (runId: number, bearer = token, ip = "203.0.113.10", url = "/api/reports") =>
     app.inject({
       method: "POST",
-      url: "/api/reports",
+      url,
       remoteAddress: ip,
       headers: {
         authorization: `Bearer ${bearer}`,
@@ -69,6 +69,18 @@ describe("rate limit on POST /api/reports, through buildApp", () => {
       expect(limited.statusCode).toBe(429);
       expect(limited.json<unknown>()).toMatchObject({ error: { code: "rate_limited" } });
       expect(Number(limited.headers["retry-after"])).toBeGreaterThanOrEqual(1);
+    } finally {
+      await close();
+    }
+  });
+
+  it("counts uploads to /api/reports and /api/v2/reports against one budget", async () => {
+    const { upload, close } = await setup(2);
+    try {
+      expect((await upload(1)).statusCode).toBe(201);
+      expect((await upload(2, undefined, undefined, "/api/v2/reports")).statusCode).toBe(201);
+      expect((await upload(3, undefined, undefined, "/api/v2/reports")).statusCode).toBe(429);
+      expect((await upload(4)).statusCode).toBe(429);
     } finally {
       await close();
     }

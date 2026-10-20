@@ -2,9 +2,19 @@ import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import { errorBody } from "../api/errors.js";
 
-// Routes that skip the global Bearer API_TOKEN check. /api/reports authenticates itself with a per-repo token; the OpenAPI
-// spec and its docs page are public by design (docs/decisions/0010-openapi-published-contract.md).
-const PUBLIC_PATHS = new Set(["/webhooks/github", "/health", "/api/reports", "/openapi.json", "/docs"]);
+// Routes that skip the global Bearer API_TOKEN check. The upload route (in each API version) authenticates itself with a
+// per-repo token; the OpenAPI specs and their docs pages are public by design
+// (docs/decisions/0010-openapi-published-contract.md).
+const PUBLIC_PATHS = new Set([
+  "/webhooks/github",
+  "/health",
+  "/api/reports",
+  "/api/v2/reports",
+  "/openapi.json",
+  "/openapi.v2.json",
+  "/docs",
+  "/docs/v2",
+]);
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {
   const apiToken = process.env.API_TOKEN;

@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
+import { API_VERSIONS, type ApiRouteOptions, type ApiVersion, apiPrefix } from "../api/version.js";
 import flakyTestsRoute from "./api/flakyTests.js";
 import reportsRoute from "./api/reports.js";
 import repoSummaryRoute from "./api/repoSummary.js";
@@ -12,20 +13,29 @@ import runsRoute from "./runs.js";
 import testResultsRoute from "./tests.js";
 import githubWebhookRoute from "./webhooks/github.js";
 
-export interface RouteModule {
+interface RouteModuleBase {
   /** Path of the route file under routes/, without extension. Checked against the directory by routes.test.ts. */
   file: string;
-  plugin: FastifyPluginAsync;
   /** URL prefix the plugin is mounted under; the plugin itself registers the path after it. */
   prefix: string;
 }
+
+export type RouteModule =
+  | (RouteModuleBase & { plugin: FastifyPluginAsync; versions?: undefined })
+  /** A published API route: registered once per version, at `apiPrefix(version)` with `{ apiVersion }`. */
+  | (RouteModuleBase & {
+      plugin: FastifyPluginAsync<ApiRouteOptions>;
+      prefix: "/api";
+      versions: readonly ApiVersion[];
+    });
 
 /**
  * Every route plugin, registered explicitly instead of with @fastify/autoload: autoload imports files from disk at
  * runtime, which a bundler (esbuild for Lambda) cannot see, so the routes would be missing from the bundle.
  * The prefixes are the ones autoload derived from the directory names: files in routes/api/ live under /api and
- * routes/webhooks/github.ts under /webhooks. Adding a route file means adding a line here; routes.test.ts fails if
- * one is forgotten.
+ * routes/webhooks/github.ts under /webhooks. Files in routes/api/ are also mounted at /api/v2: the same plugin,
+ * registered again with `apiVersion: 2`. Adding a route file means adding a line here; routes.test.ts fails if one
+ * is forgotten.
  */
 export const routeModules: RouteModule[] = [
   { file: "health", plugin: healthRoute, prefix: "" },
@@ -33,17 +43,23 @@ export const routeModules: RouteModule[] = [
   { file: "repos", plugin: reposRoute, prefix: "" },
   { file: "runs", plugin: runsRoute, prefix: "" },
   { file: "tests", plugin: testResultsRoute, prefix: "" },
-  { file: "api/flakyTests", plugin: flakyTestsRoute, prefix: "/api" },
-  { file: "api/repoSummary", plugin: repoSummaryRoute, prefix: "/api" },
-  { file: "api/reports", plugin: reportsRoute, prefix: "/api" },
-  { file: "api/repos", plugin: apiReposRoute, prefix: "/api" },
-  { file: "api/testFailures", plugin: testFailuresRoute, prefix: "/api" },
-  { file: "api/testHistory", plugin: testHistoryRoute, prefix: "/api" },
+  { file: "api/flakyTests", plugin: flakyTestsRoute, prefix: "/api", versions: API_VERSIONS },
+  { file: "api/repoSummary", plugin: repoSummaryRoute, prefix: "/api", versions: API_VERSIONS },
+  { file: "api/reports", plugin: reportsRoute, prefix: "/api", versions: API_VERSIONS },
+  { file: "api/repos", plugin: apiReposRoute, prefix: "/api", versions: API_VERSIONS },
+  { file: "api/testFailures", plugin: testFailuresRoute, prefix: "/api", versions: API_VERSIONS },
+  { file: "api/testHistory", plugin: testHistoryRoute, prefix: "/api", versions: API_VERSIONS },
   { file: "webhooks/github", plugin: githubWebhookRoute, prefix: "/webhooks" },
 ];
 
 export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
-  for (const { plugin, prefix } of routeModules) {
-    await fastify.register(plugin, { prefix });
+  for (const m of routeModules) {
+    if (m.versions) {
+      for (const apiVersion of m.versions) {
+        await fastify.register(m.plugin, { prefix: apiPrefix(apiVersion), apiVersion });
+      }
+    } else {
+      await fastify.register(m.plugin, { prefix: m.prefix });
+    }
   }
 }

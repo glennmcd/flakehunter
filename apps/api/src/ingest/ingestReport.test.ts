@@ -49,7 +49,7 @@ describe("ingestReport", () => {
       const result = await ingestReport(db, { repoId: repo.id, ...base });
 
       expect(result.duplicate).toBe(false);
-      expect(result.run).toMatchObject({ githubRunId: 500, attempt: 1, headSha: SHA });
+      expect(result.run).toMatchObject({ ciRunId: 500, ciSource: "github_actions", attempt: 1, headSha: SHA });
       expect(result.counts).toEqual({ suites: 1, tests: 3, passed: 1, failed: 1, error: 0, skipped: 1 });
       expect(await count(db, "workflow_runs")).toBe(1);
       expect(await count(db, "test_results")).toBe(3);

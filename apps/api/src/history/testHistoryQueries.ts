@@ -1,4 +1,4 @@
-import type { TestHistoryResponse } from "@flakehunter/shared-types";
+import type { v2 } from "@flakehunter/shared-types";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import type { AnyDb } from "../db/client.js";
 import { testCases, testResults, workflowRuns } from "../db/schema.js";
@@ -12,7 +12,7 @@ export interface TestHistoryQuery {
 }
 
 /** Newest-first result history for one test, or null if the test does not exist. failureStack is never selected. */
-export async function getTestHistory(db: AnyDb, query: TestHistoryQuery): Promise<TestHistoryResponse | null> {
+export async function getTestHistory(db: AnyDb, query: TestHistoryQuery): Promise<v2.TestHistoryResponse | null> {
   const [test] = await db
     .select({ id: testCases.id, repoId: testCases.repoId, classname: testCases.classname, name: testCases.name })
     .from(testCases)
@@ -36,7 +36,8 @@ export async function getTestHistory(db: AnyDb, query: TestHistoryQuery): Promis
       failureMessage: testResults.failureMessage,
       createdAt: testResults.createdAt,
       runId: workflowRuns.id,
-      githubRunId: workflowRuns.ciRunId,
+      ciRunId: workflowRuns.ciRunId,
+      ciSource: workflowRuns.ciSource,
       attempt: workflowRuns.runAttempt,
       workflowName: workflowRuns.workflowName,
       htmlUrl: workflowRuns.htmlUrl,
@@ -57,7 +58,7 @@ export async function getTestHistory(db: AnyDb, query: TestHistoryQuery): Promis
     test,
     data: rows.map((row) => ({
       resultId: row.resultId,
-      status: row.status as TestHistoryResponse["data"][number]["status"],
+      status: row.status as v2.TestHistoryResponse["data"][number]["status"],
       headSha: row.headSha,
       headBranch: row.headBranch,
       occurrenceIndex: row.occurrenceIndex,
@@ -66,7 +67,8 @@ export async function getTestHistory(db: AnyDb, query: TestHistoryQuery): Promis
       createdAt: new Date(row.createdAt).toISOString(),
       run: {
         id: row.runId,
-        githubRunId: row.githubRunId,
+        ciRunId: row.ciRunId,
+        ciSource: row.ciSource,
         attempt: row.attempt,
         workflowName: row.workflowName,
         htmlUrl: row.htmlUrl,

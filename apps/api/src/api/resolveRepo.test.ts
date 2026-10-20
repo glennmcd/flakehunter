@@ -69,7 +69,7 @@ describe("resolveRepo with more than one host", () => {
       expect(err).toBeInstanceOf(ApiError);
       expect((err as ApiError).statusCode).toBe(400);
       expect((err as ApiError).details).toEqual([
-        { path: "query.repo", message: "matches repositories on more than one host" },
+        { path: "query.repo", message: "matches repositories on hosts github, gitlab" },
       ]);
     } finally {
       await t.close();

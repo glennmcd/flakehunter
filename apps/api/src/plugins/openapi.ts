@@ -2,40 +2,67 @@ import swagger from "@fastify/swagger";
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import { jsonSchemaTransform } from "fastify-type-provider-zod";
+import { API_VERSIONS, type ApiVersion, apiPrefix } from "../api/version.js";
 import { MAX_REPORT_BYTES } from "../ingest/limits.js";
 
 /**
- * Version of the published contract (docs/openapi.json), not of the app: release-please bumps the app version on every
- * release, which would make the committed spec stale each time. Bump the minor for compatible additions; a breaking
- * change gets a new path prefix instead (see docs/decisions/0010-openapi-published-contract.md).
+ * Version of each published contract (docs/openapi.json, docs/openapi.v2.json), not of the app: release-please bumps the
+ * app version on every release, which would make the committed specs stale each time. Bump the minor for compatible
+ * additions; a breaking change gets a new path prefix instead (see docs/decisions/0010-openapi-published-contract.md).
+ * v2 is a pre-release while it still has v1's schemas; it becomes 2.0.0 with its own contract (docs/plans/api-v2.md).
  */
-export const API_CONTRACT_VERSION = "1.0.0";
+export const API_CONTRACT_VERSIONS: Record<ApiVersion, string> = { 1: "1.0.0", 2: "2.0.0" };
 
-const DOCS_PAGE = `<!doctype html>
+/** Where each version's OpenAPI document and docs page are served. */
+export const SPEC_URLS: Record<ApiVersion, string> = { 1: "/openapi.json", 2: "/openapi.v2.json" };
+export const DOCS_URLS: Record<ApiVersion, string> = { 1: "/docs", 2: "/docs/v2" };
+
+const docsPage = (title: string, specUrl: string) => `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>FlakeHunter API</title>
+    <title>${title}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css" />
   </head>
   <body>
     <div id="ui"></div>
     <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
     <script>
-      SwaggerUIBundle({ url: "/openapi.json", dom_id: "#ui" });
+      SwaggerUIBundle({ url: "${specUrl}", dom_id: "#ui" });
     </script>
   </body>
 </html>
 `;
 
 type OpenApiDoc = {
+  info?: Record<string, unknown>;
   paths?: Record<string, Record<string, Record<string, unknown>>>;
 };
 
+/** The API version a documented path belongs to: /api/v2/... is v2, any other /api/... is v1. */
+function versionOfPath(path: string): ApiVersion | null {
+  const v2 = apiPrefix(2);
+  if (path === v2 || path.startsWith(`${v2}/`)) return 2;
+  return path.startsWith(`${apiPrefix(1)}/`) ? 1 : null;
+}
+
+/**
+ * One version's document, cut from the document of every route: only that version's paths and its contract version;
+ * the components, tags and the rest are shared. Safe because the generated document inlines every schema, so neither
+ * half can point at the other (plugins/openapi.test.ts checks there is no $ref). The input is not modified.
+ */
+export function specForVersion(document: object, version: ApiVersion): object {
+  const full = document as OpenApiDoc;
+  const paths = Object.fromEntries(
+    Object.entries(full.paths ?? {}).filter(([path]) => versionOfPath(path) === version),
+  );
+  return { ...full, info: { ...full.info, version: API_CONTRACT_VERSIONS[version] }, paths };
+}
+
 /** The upload route takes a raw XML body, which has no zod schema, so its request body is described here. */
-function describeReportsUpload(doc: OpenApiDoc): void {
-  const post = doc.paths?.["/api/reports"]?.post;
+function describeReportsUpload(doc: OpenApiDoc, path: string): void {
+  const post = doc.paths?.[path]?.post;
   if (!post) return;
   const xml = { schema: { type: "string", description: "A JUnit XML report (<testsuite> or <testsuites>)." } };
   post.requestBody = {
@@ -63,7 +90,7 @@ const openapiPlugin: FastifyPluginAsync = async (fastify) => {
       openapi: "3.1.0",
       info: {
         title: "FlakeHunter API",
-        version: API_CONTRACT_VERSION,
+        version: API_CONTRACT_VERSIONS[1],
         description:
           "Ingests JUnit XML reports and reports flaky tests. A test is flaky on a commit when it has both a pass and a " +
           "fail (or error) on the same commit SHA. Every error uses the same body: `{ error: { code, message, details? }, " +
@@ -89,15 +116,20 @@ const openapiPlugin: FastifyPluginAsync = async (fastify) => {
     transform: jsonSchemaTransform,
     transformObject: (document) => {
       if (!("openapiObject" in document)) return document.swaggerObject;
-      describeReportsUpload(document.openapiObject as unknown as OpenApiDoc);
+      for (const version of API_VERSIONS) {
+        describeReportsUpload(document.openapiObject as unknown as OpenApiDoc, `${apiPrefix(version)}/reports`);
+      }
       return document.openapiObject;
     },
   });
 
-  fastify.get("/openapi.json", { schema: { hide: true } }, async () => fastify.swagger());
-  fastify.get("/docs", { schema: { hide: true } }, async (_request, reply) =>
-    reply.type("text/html; charset=utf-8").send(DOCS_PAGE),
-  );
+  for (const version of API_VERSIONS) {
+    const page = docsPage(version === 1 ? "FlakeHunter API" : `FlakeHunter API v${version}`, SPEC_URLS[version]);
+    fastify.get(SPEC_URLS[version], { schema: { hide: true } }, async () => specForVersion(fastify.swagger(), version));
+    fastify.get(DOCS_URLS[version], { schema: { hide: true } }, async (_request, reply) =>
+      reply.type("text/html; charset=utf-8").send(page),
+    );
+  }
 };
 
 export default fp(openapiPlugin);

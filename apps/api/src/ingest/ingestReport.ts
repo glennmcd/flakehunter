@@ -21,7 +21,7 @@ export interface IngestReportInput {
 }
 
 export interface IngestReportResult {
-  run: { id: number; githubRunId: number; attempt: number; headSha: string };
+  run: { id: number; ciRunId: number; ciSource: CiSource; attempt: number; headSha: string };
   duplicate: boolean;
   counts: ReportCounts;
 }
@@ -90,7 +90,13 @@ export async function ingestReport(db: AnyDb, input: IngestReportInput): Promise
       ]);
     }
 
-    const runInfo = { id: run.id, githubRunId: run.ciRunId, attempt: run.runAttempt, headSha: run.headSha };
+    const runInfo = {
+      id: run.id,
+      ciRunId: run.ciRunId,
+      ciSource: run.ciSource,
+      attempt: run.runAttempt,
+      headSha: run.headSha,
+    };
 
     const [report] = await tx
       .insert(reports)

@@ -1,4 +1,4 @@
-import type { ReposResponse } from "@flakehunter/shared-types";
+import type { v2 } from "@flakehunter/shared-types";
 import { asc, sql } from "drizzle-orm";
 import type { AnyDb } from "../db/client.js";
 import { repos } from "../db/schema.js";
@@ -7,9 +7,9 @@ import { repos } from "../db/schema.js";
 export async function listRepos(
   db: AnyDb,
   { limit, offset }: { limit: number; offset: number },
-): Promise<ReposResponse> {
+): Promise<v2.ReposResponse> {
   const data = await db
-    .select({ id: repos.id, fullName: repos.fullName, owner: repos.owner, name: repos.name })
+    .select({ id: repos.id, host: repos.host, fullName: repos.fullName, owner: repos.owner, name: repos.name })
     .from(repos)
     .orderBy(asc(repos.fullName), asc(repos.id))
     .limit(limit)
