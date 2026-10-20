@@ -2,7 +2,7 @@ import { generateDemoRuns } from "./demo/generateRuns.js";
 import { httpUploader, parseSeedConfig, SeedError, seedDemo } from "./demo/seedDemo.js";
 
 // Generates a realistic fake CI history (stable tests, a few flaky ones, reruns) and uploads it through the real
-// POST /api/reports endpoint, so a demo exercises the actual ingestion path. Re-running is safe: runs are
+// POST /api/v2/reports endpoint, so a demo exercises the actual ingestion path. Re-running is safe: runs are
 // deterministic for a seed, so repeats come back as 200 duplicates.
 //
 //   DEMO_UPLOAD_TOKEN=fh_... bun run seed:demo                       # local API on :3000, last 30 days
