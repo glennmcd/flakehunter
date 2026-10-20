@@ -15,6 +15,7 @@ they came from are in [../plans/](../plans/README.md).
 | [0008](0008-aws-scp.md) | SCP use in AWS | 4 |
 | [0009](0009-release-please-versioning.md) | Automated versions with release-please | 4 |
 | [0010](0010-openapi-published-contract.md) | OpenAPI as the published contract | 4 |
+| [0011](0011-repository-hosts-and-ci-sources.md) | Repository hosts and CI sources recorded separately | after 4 |
 
 ## Adding one
 

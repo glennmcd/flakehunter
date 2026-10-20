@@ -39,13 +39,15 @@ Every new function or route ships with tests in the same change; run `bun run li
 Seeding a repo row (required before ingestion works for that repo):
 
 ```bash
-SEED_REPO_OWNER=<owner> SEED_REPO_NAME=<repo> SEED_REPO_GITHUB_ID=<id> bun run --env-file=apps/api/.env scripts/seed-dev-repo.ts
+SEED_REPO_OWNER=<owner> SEED_REPO_NAME=<repo> SEED_REPO_EXTERNAL_ID=<id> bun run --env-file=apps/api/.env scripts/seed-dev-repo.ts
 ```
+
+`SEED_REPO_HOST` defaults to `github` (the only host today); `SEED_REPO_EXTERNAL_ID` is the host's numeric repo id, and the older `SEED_REPO_GITHUB_ID` still works. The `github_installations` row is only written for `github`.
 
 Minting a per-repo upload token for `POST /api/reports` (printed once; only its sha256 is stored):
 
 ```bash
-TOKEN_REPO_FULL_NAME=<owner>/<repo> bun run --env-file=apps/api/.env scripts/create-repo-token.ts
+TOKEN_REPO_FULL_NAME=<owner>/<repo> bun run --env-file=apps/api/.env scripts/create-repo-token.ts   # TOKEN_REPO_HOST defaults to github
 ```
 
 Revoking an upload token (takes effect on its next request; running it twice is harmless):
@@ -72,29 +74,34 @@ bun run seed:demo --dry-run                              # generate and count on
 
 ### Ingestion path
 
-The ingestion path runs from the webhook route through the `ingest/` modules:
+A repository has a **host** (`repos.host`: where its code lives, `github` today) and each run a **CI source** (`workflow_runs.ci_source`: what ran it, `github_actions` today); see ADR 0011. The values are `REPO_HOSTS`, `CI_SOURCES` and `DEFAULT_CI_SOURCE` in `packages/shared-types/src/domain.ts`, and the database has a check constraint for each, so a new value goes in both in one change. Neither column has a default: every insert names them. The Drizzle properties are neutral (`externalRepoId`, `ciRunId`, `runAttempt`) while the columns are still `github_repo_id`, `github_run_id`, `github_run_attempt`.
+
+CI-specific fetching goes through a `CiSourceAdapter` (`ci/types.ts`: `listRunArtifacts`, `downloadArtifact`, plus the `ciSource` it serves and the `hosts` it can fetch for). `ci/registry.ts` (`CiSourceRegistry`) looks one up by CI source and throws on an unknown one. `GithubActionsAdapter` in `ci/githubActions/` is the only adapter; that folder also holds the Octokit client, signature verification (`webhookVerify.ts`), the trust check (`runSource.ts`) and `workflowRun.ts` (`workflowRunToInput`, payload → neutral `CiRunInput`).
+
+The webhook ingestion path runs from the route through the `ingest/` modules:
 
 1. `routes/webhooks/github.ts` registers a JSON content-type parser scoped to that plugin that keeps `request.rawBody`, then verifies `X-Hub-Signature-256` against it.
 2. It inserts the delivery into `webhook_events`, keyed on `X-GitHub-Delivery`. If the insert returns no row, the delivery is a duplicate and processing is skipped.
-3. For `workflow_run` events with `action: completed`, it first skips runs that may carry outside code (`github/runSource.ts`), because whoever writes a run's code controls its artifact: a trigger not in `TRUSTED_TRIGGERS` (`push`, `pull_request`, `merge_group`, `schedule`, `workflow_dispatch`; this excludes `pull_request_target`, `workflow_run` and `issue_comment`, which run in the base repo but often relay fork code), or a `workflow_run.head_repository` that is missing or not the repo itself (fork pull requests). Otherwise it looks up the repo by `github_repo_id` and calls `ingest/processWorkflowRun.ts` **synchronously inside the request**, passing the owner and name from the `repos` row, never from the payload.
+3. For `workflow_run` events with `action: completed`, it first skips runs that may carry outside code (`ci/githubActions/runSource.ts`), because whoever writes a run's code controls its artifact: a trigger not in `TRUSTED_TRIGGERS` (`push`, `pull_request`, `merge_group`, `schedule`, `workflow_dispatch`; this excludes `pull_request_target`, `workflow_run` and `issue_comment`, which run in the base repo but often relay fork code), or a `workflow_run.head_repository` that is missing or not the repo itself (fork pull requests). Otherwise it looks up the repo by `(host = 'github', github_repo_id)` and calls `ingest/processCiRun.ts` with the `github_actions` adapter **synchronously inside the request**, passing the owner and name from the `repos` row, never from the payload.
 4. Skips and failures are written to `webhook_events.processing_error` and the route still returns 200. Only fixed text is stored there (skip reasons, `ArtifactRejectedError` messages, or "processing failed; see the API logs"); raw error text goes to the log only.
 
-`processWorkflowRun` then:
+`processCiRun` then:
 
-- upserts `workflow_runs` on `(repo_id, github_run_id, github_run_attempt)`
+- refuses an adapter whose `ciSource` differs from the run's or whose `hosts` exclude the repo's, so a run is never fetched with the wrong system's credentials
+- upserts `workflow_runs` on `(repo_id, ci_source, github_run_id, github_run_attempt)` (`workflow_runs_run_key_unique`)
 - takes the **first** artifact that has not expired, refuses it (`ArtifactRejectedError`, `ingest/limits.ts`) when its listed or downloaded size is over `MAX_ARTIFACT_ZIP_BYTES` (10 MB), downloads the zip and extracts `.xml` entries (`zipExtract.ts`)
 - `zipExtract.ts` treats the artifact as untrusted: it streams the zip through fflate's `Unzip`, never inflates non-XML entries, caps the entry count (`MAX_ZIP_ENTRIES`), and stops as soon as the **actual** decompressed XML passes `MAX_REPORT_BYTES` (the archive's declared sizes are not trusted), so a zip bomb is never fully inflated
 - parses each file with `junitParser.ts`, which flattens nested `<testsuites>`/`<testsuite>` at any depth
 - inserts `test_suites`, upserts `test_cases` on `(repo_id, classname, name)`, and inserts `test_results` (shared with uploads via `ingest/insertParsedSuites.ts`)
 
-`processWorkflowRun` skips artifact ingestion when the run already has a `reports` row (from an upload or an earlier delivery) and records its own `reports` row (`report_key = "webhook-artifact"`) in the same transaction as the results, so redeliveries and upload+webhook never double count.
+`processCiRun` skips artifact ingestion when the run already has a `reports` row (from an upload or an earlier delivery) and records its own `reports` row (`report_key = "webhook-artifact"`) in the same transaction as the results, so redeliveries and upload+webhook never double count.
 
 ### Upload path (v1 REST API)
 
 `POST /api/reports` (`routes/api/reports.ts`) takes a raw XML body (`application/xml` or `text/xml`, 11 MB limit) with metadata in headers (`X-FH-Run-Id`, `X-FH-Sha`, optional `X-FH-Run-Attempt`, `X-FH-Branch`, `X-FH-Workflow`, `X-FH-Report-Key`, `X-FH-Timestamp`). `X-FH-Timestamp` (ISO-8601, at most 5 minutes in the future) backdates a new run and its results through `ingestReport`'s `timestamp` and `insertParsedSuites`' `createdAt`; an existing run row keeps its own `created_at`. Without it everything is stamped with the DB's `now()`.
 
 - It authenticates with a per-repo token, not `API_TOKEN`: a route-level `onRequest` hook calls `auth/repoToken.ts` (`findRepoByToken`, sha256 lookup, revocable). The repo comes from the token, never from the request. The hook runs before body parsing and header validation.
-- `ingest/ingestReport.ts` does the work in one transaction. Idempotency is the `reports` table, unique on `(run_id, report_key)`; the run is keyed on `(repo_id, github_run_id, attempt)`. A repeat returns 200 with the original counts (stored on the `reports` row); a first upload returns 201. A SHA that contradicts an existing run is a 400, and an existing run row (e.g. from the webhook) is reused, not overwritten.
+- `ingest/ingestReport.ts` does the work in one transaction. Idempotency is the `reports` table, unique on `(run_id, report_key)`; the run is keyed on `(repo_id, ci_source, github_run_id, attempt)`. v1 cannot name a CI source, so the route passes `DEFAULT_CI_SOURCE[repo.host]` (`findRepoByToken` returns the host); a webhook delivery and an upload of the same GitHub Actions run therefore share one run row. A repeat returns 200 with the original counts (stored on the `reports` row); a first upload returns 201. A SHA that contradicts an existing run is a 400, and an existing run row (e.g. from the webhook) is reused, not overwritten.
 - Unparseable bodies or reports with no `<testsuite>` are `invalid_report` (422) and leave nothing behind.
 - **gzip:** `Content-Encoding: gzip` is accepted (`http/gzipBody.ts`, a `preParsing` hook that runs after the token check). The 11 MB limit applies to the **decompressed** size, enforced while streaming so a decompression bomb is destroyed at the limit (`413 payload_too_large`); bad gzip data is a `400`, and any other encoding is a `400`. This matters because a Lambda request body is capped near 6 MB (about 4.5 MB raw after base64), so large reports must be sent compressed; `scripts/seed-demo.ts` and the CI snippet in `docs/api.md` do.
 - **Rate limit:** an `onRequest` hook (`plugins/rateLimit.ts`, `ratelimit/`) runs before the token lookup and counts each request under its source IP and, if it sends one, a sha256 of its bearer token (the raw token is never stored). Past `UPLOAD_RATE_LIMIT_MAX` (default 120) per `UPLOAD_RATE_LIMIT_WINDOW_SECONDS` (default 60) it answers `429 rate_limited` with `Retry-After`. Counting by IP is what stops a flood of invented tokens. The store is a `RateLimitStore`: in memory for tests and local runs, a DynamoDB fixed-window counter (atomic `ADD`, TTL) on Lambda, where `buildApp` refuses to start without `RATE_LIMIT_TABLE`. A failing store lets requests through and logs a warning. `buildApp({ rateLimit })` overrides it in tests; tests that upload many reports from one address (the seed e2e) raise the limit.
@@ -137,11 +144,11 @@ Test identity is `classname + name`, scoped per repo. Duplicate names within one
 
 - **Explicit route registration:** `routes/index.ts` lists every route plugin with its URL prefix (`routeModules`) and `app.ts` registers them through `registerRoutes`. There is no autoload: a bundler (esbuild for Lambda) cannot see files imported from disk at runtime. Adding a route file means adding an entry there; `routes/routes.test.ts` fails if a file on disk is missing from the list.
 - **Route prefixing:** files in `routes/api/` are mounted at `/api` and `routes/webhooks/github.ts` at `/webhooks` (it registers `/github` to serve `/webhooks/github`; writing the full path double-prefixes it). Keep `/api` route files flat in `routes/api/` and write the path after `/api` (e.g. `/tests/flaky`).
-- **App wiring:** `app.ts` exports `buildApp({ db?, logger? })` (zod validator/serializer compilers, error handler, db, auth, github, explicit routes); `index.ts` only calls it and listens. `app.test.ts` builds the real app over PGlite.
+- **App wiring:** `app.ts` exports `buildApp({ db?, logger?, ciSources? })` (zod validator/serializer compilers, error handler, db, auth, ciSources, explicit routes); `index.ts` only calls it and listens. `app.test.ts` builds the real app over PGlite.
 - **Auth hook:** `plugins/auth.ts` is a global `onRequest` hook (wrapped in `fastify-plugin`) that requires `Authorization: Bearer <API_TOKEN>`.
   - It exempts `/webhooks/github`, `/health` and `/api/reports` by exact match on the path part of `request.url`. `routeOptions.url` is not reliable there, and the hook also runs for unmatched routes. `/api/reports` does its own per-repo token check.
   - New public routes must be added to that exemption.
-- **Decorators:** `plugins/db.ts` and `plugins/github.ts` decorate `fastify.db` (Drizzle over postgres-js) and `fastify.github` (Octokit, authenticated with a PAT).
+- **Decorators:** `plugins/db.ts` and `plugins/ciSources.ts` decorate `fastify.db` (Drizzle over postgres-js) and `fastify.ciSources` (a `CiSourceRegistry` holding `GithubActionsAdapter`, built from `GITHUB_PAT`, which is still required at startup).
 - **Lambda entry:** `src/lambda.ts` exports `handler` (`createHandler` in `lambda/handler.ts`): it reads the secrets from SSM (`lambda/secrets.ts`, `loadSecrets`) into `process.env`, builds the app once per execution environment and wraps it with `@fastify/aws-lambda`. The adapter must wrap the app **before** `app.ready()`. A failed start is not cached. `index.ts` stays the long-running entry for local runs. Lambda runs Node 22, not Bun; the source uses no Bun-only APIs, so keep it that way.
 - **DB options:** `db/options.ts` (`dbOptionsFor`) gives postgres-js one connection plus timeouts on Lambda and turns off prepared statements for Neon's `-pooler` host. Migrations (`db/migrator.ts`, `bun run db:migrate`) resolve their folder from their own file and should use the direct (non-pooled) connection string.
 
@@ -149,9 +156,9 @@ Test identity is `classname + name`, scoped per repo. Duplicate names within one
 
 - Domain functions take `AnyDb` from `db/client.ts` (a generic `PgDatabase`), not the postgres-js-specific `Db`. That lets the same code run against the PGlite instance from `apps/api/test/testDb.ts`. Keep new DB-touching functions on `AnyDb`.
 - `createTestDb()` returns a fresh in-memory database with all migrations applied.
-- Tests fake the GitHub client with a plain object cast to `GithubClient`; see `processWorkflowRun.test.ts`. App-level tests pass it as `buildApp({ github })`; see `routes/webhooks/github.test.ts`, which also signs payloads.
+- Tests fake CI with a plain object that implements `CiSourceAdapter`; see `fakeAdapter` in `ingest/processCiRun.test.ts`. App-level tests pass `buildApp({ ciSources: new CiSourceRegistry([adapter]) })`; see `routes/webhooks/github.test.ts`, which also signs payloads. Only `ci/githubActions/GithubActionsAdapter.test.ts` fakes Octokit itself.
 - With PGlite, `db.execute(sql...)` returns `{ rows }`, not an array. Because the shapes differ per driver, production query code uses the Drizzle query builder (including `$with` CTEs); raw `execute` is only for assertions in tests.
-- `test/fixtures.ts` has `seedRepo`, `seedRun` and `seedResult` (creates the test case, run and suite for you), plus `daysAgo` and `sha`. `test/apiApp.ts` builds a small app for route tests. Assert HTTP bodies with `res.json<unknown>()` when passing them straight to `toEqual`, or the types collapse to `undefined`.
+- `test/fixtures.ts` has `seedRepo` (host defaults to `github`), `seedRun` (CI source defaults to `github_actions`) and `seedResult` (creates the test case, run and suite for you), plus `daysAgo` and `sha`. `test/apiApp.ts` builds a small app for route tests. Assert HTTP bodies with `res.json<unknown>()` when passing them straight to `toEqual`, or the types collapse to `undefined`.
 
 ### Web app (`apps/web`)
 
