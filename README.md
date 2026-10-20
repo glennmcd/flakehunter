@@ -15,7 +15,7 @@ ask for access)
 
 ## How it works
 
-- **Collects** JUnit XML from your CI, either pulled from the workflow run's artifact by a GitHub webhook or pushed
+- **Collects** JUnit XML from your CI, either pulled from the workflow run's artifact by a Repo webhook or pushed
   with one `curl` step.
 - **Flags** a test as flaky when it has a pass and a fail on the same commit SHA, regardless of which workflow or job
   ran it. Same code, different result: no guessing from failure messages.
