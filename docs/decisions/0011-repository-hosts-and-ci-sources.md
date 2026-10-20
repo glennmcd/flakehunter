@@ -11,8 +11,8 @@ built by GitHub Actions, Jenkins, or both.
 ## Decision
 
 Record the two separately. `repos.host` (`github`) says where the code lives; `workflow_runs.ci_source`
-(`github_actions`) says which system ran a run. The repo keys are `(host, github_repo_id)` and `(host, full_name)`,
-and the run key is `(repo_id, ci_source, github_run_id, github_run_attempt)`. CI-specific fetching sits behind
+(`github_actions`) says which system ran a run. The repo keys are `(host, external_repo_id)` and `(host, full_name)`,
+and the run key is `(repo_id, ci_source, ci_run_id, run_attempt)`. CI-specific fetching sits behind
 `CiSourceAdapter` (`ci/`), with `GithubActionsAdapter` the only one. Hosts get no adapter until something needs one.
 The v1 API cannot name a CI source and uses `DEFAULT_CI_SOURCE[host]`; exposing host and CI source is v2's job.
 
@@ -22,4 +22,6 @@ The v1 API cannot name a CI source and uses `DEFAULT_CI_SOURCE[host]`; exposing 
   of one GitHub Actions run still count once.
 - A bare `owner/name` matching repos on two hosts is a 400 rather than a guess.
 - Each new host or CI source is added to `REPO_HOSTS` / `CI_SOURCES` and to the check constraint in one change.
-- Column names still say `github_*` until the naming cleanup renames them (`docs/plans/ci-source-adapters.md`).
+- The CI identity columns are named for no host: `github_repo_id`, `github_run_id` and `github_run_attempt` became
+  `external_repo_id`, `ci_run_id` and `run_attempt` in migration 0004 (the naming cleanup in
+  `docs/plans/ci-source-adapters.md`). The v1 response field `githubRunId` stays until v1 is retired.

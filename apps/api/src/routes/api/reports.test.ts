@@ -95,7 +95,7 @@ describe("POST /api/reports", () => {
       expect(res.statusCode).toBe(201);
       expect(res.json().run.attempt).toBe(2);
       const { rows } = await db.execute(
-        sql`select workflow_name, head_branch from workflow_runs where github_run_attempt = 2`,
+        sql`select workflow_name, head_branch from workflow_runs where run_attempt = 2`,
       );
       expect(rows).toEqual([{ workflow_name: "Nightly", head_branch: "feature/x" }]);
     } finally {

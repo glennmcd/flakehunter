@@ -91,7 +91,7 @@ async function handleCompletedRun(fastify: FastifyInstance, event: GithubWorkflo
     .select()
     .from(repos)
     .where(and(eq(repos.host, "github"), eq(repos.externalRepoId, event.repository.id)));
-  if (!repo) return `no repo registered for github_repo_id ${event.repository.id}`;
+  if (!repo) return `no github repo registered with id ${event.repository.id}`;
 
   // Owner and name from the registered row, not the payload: the repo id is what was matched, so the name must follow it.
   const ciRepo: CiRepo = {

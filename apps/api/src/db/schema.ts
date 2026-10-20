@@ -20,8 +20,8 @@ export const repos = pgTable(
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
     host: text("host", { enum: REPO_HOSTS }).notNull(),
-    // The host's own id for the repository. The column keeps its GitHub name until the naming cleanup renames it.
-    externalRepoId: bigint("github_repo_id", { mode: "number" }).notNull(),
+    // The host's own id for the repository.
+    externalRepoId: bigint("external_repo_id", { mode: "number" }).notNull(),
     owner: text("owner").notNull(),
     name: text("name").notNull(),
     fullName: text("full_name").notNull(),
@@ -60,9 +60,9 @@ export const workflowRuns = pgTable(
       .notNull()
       .references(() => repos.id),
     ciSource: text("ci_source", { enum: CI_SOURCES }).notNull(),
-    // The CI system's own run id and attempt. The columns keep their GitHub names until the naming cleanup.
-    ciRunId: bigint("github_run_id", { mode: "number" }).notNull(),
-    runAttempt: integer("github_run_attempt").notNull().default(1),
+    // The CI system's own run id and attempt.
+    ciRunId: bigint("ci_run_id", { mode: "number" }).notNull(),
+    runAttempt: integer("run_attempt").notNull().default(1),
     workflowName: text("workflow_name").notNull(),
     headSha: text("head_sha").notNull(),
     headBranch: text("head_branch"),

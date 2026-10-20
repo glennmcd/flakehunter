@@ -7,7 +7,10 @@ import { parseJunitXml } from "./junitParser.js";
 import { ArtifactRejectedError, MAX_ARTIFACT_ZIP_BYTES } from "./limits.js";
 import { extractXmlFiles } from "./zipExtract.js";
 
-/** Report key used for results ingested from a CI artifact, so uploads can use their own keys. */
+/**
+ * Report key for results ingested from a CI artifact. The flakehunter-airflow DAG uploads with the same key, so an
+ * upload and a webhook delivery of one run count once; that is why the value keeps its name.
+ */
 export const WEBHOOK_REPORT_KEY = "webhook-artifact";
 
 export interface CiRunInput {

@@ -18,7 +18,11 @@ if (!(REPO_HOSTS as readonly string[]).includes(host)) {
 
 const fullName = process.env.TOKEN_REPO_FULL_NAME;
 if (!fullName) {
-  throw new Error("Set TOKEN_REPO_FULL_NAME (e.g. owner/name) before running this script");
+  throw new Error("Set TOKEN_REPO_FULL_NAME (e.g. owner/name or group/sub/project) before running this script");
+}
+// The same rule as API v2's `repo` parameter: one or more `/`-separated segments, so nested GitLab groups work.
+if (fullName.split("/").some((segment) => segment === "")) {
+  throw new Error(`TOKEN_REPO_FULL_NAME must be /-separated segments with none empty, got ${fullName}`);
 }
 
 const db = createDb(connectionString);

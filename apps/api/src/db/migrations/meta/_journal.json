@@ -29,6 +29,13 @@
       "when": 1792456987481,
       "tag": "0003_host_and_ci_source",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792459879978,
+      "tag": "0004_rename_ci_columns",
+      "breakpoints": true
     }
   ]
 }

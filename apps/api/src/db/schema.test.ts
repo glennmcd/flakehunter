@@ -124,11 +124,11 @@ async function failure(client: PGlite, statement: string): Promise<string | null
 
 function insertRepo(host: string, externalId: number, fullName: string) {
   const [owner, name] = fullName.split("/");
-  return `insert into repos (host, github_repo_id, owner, name, full_name) values ('${host}', ${externalId}, '${owner}', '${name}', '${fullName}')`;
+  return `insert into repos (host, external_repo_id, owner, name, full_name) values ('${host}', ${externalId}, '${owner}', '${name}', '${fullName}')`;
 }
 
 function insertRun(ciSource: string, runId: number, attempt = 1) {
-  return `insert into workflow_runs (repo_id, ci_source, github_run_id, github_run_attempt, workflow_name, head_sha, status)
+  return `insert into workflow_runs (repo_id, ci_source, ci_run_id, run_attempt, workflow_name, head_sha, status)
     select id, '${ciSource}', ${runId}, ${attempt}, 'CI', 'abc', 'completed' from repos order by id limit 1`;
 }
 
@@ -161,14 +161,14 @@ describe("migration 0003 (host and ci_source)", () => {
       expect(
         await failure(
           t.client,
-          "insert into repos (github_repo_id, owner, name, full_name) values (1, 'a', 'b', 'a/b')",
+          "insert into repos (external_repo_id, owner, name, full_name) values (1, 'a', 'b', 'a/b')",
         ),
       ).toContain('"host"');
       await t.client.exec(insertRepo("github", 1, "acme/widgets"));
       expect(
         await failure(
           t.client,
-          "insert into workflow_runs (repo_id, github_run_id, workflow_name, head_sha, status) select id, 1, 'CI', 'abc', 'completed' from repos",
+          "insert into workflow_runs (repo_id, ci_run_id, workflow_name, head_sha, status) select id, 1, 'CI', 'abc', 'completed' from repos",
         ),
       ).toContain('"ci_source"');
     } finally {
@@ -201,7 +201,7 @@ describe("migration 0003 (host and ci_source)", () => {
 
       await t.client.exec(insertRepo("github", 1, "acme/widgets"));
       expect(await failure(t.client, insertRepo("github", 1, "acme/other"))).toContain(
-        "repos_host_github_repo_id_unique",
+        "repos_host_external_repo_id_unique",
       );
       expect(await failure(t.client, insertRepo("github", 2, "acme/widgets"))).toContain("repos_host_full_name_unique");
       expect(await failure(t.client, insertRepo("gitlab", 1, "acme/widgets"))).toBeNull();
@@ -210,6 +210,32 @@ describe("migration 0003 (host and ci_source)", () => {
       expect(await failure(t.client, insertRun("github_actions", 100))).toContain("workflow_runs_run_key_unique");
       expect(await failure(t.client, insertRun("jenkins", 100))).toBeNull();
       expect(await failure(t.client, insertRun("github_actions", 100, 2))).toBeNull();
+    } finally {
+      await t.close();
+    }
+  });
+});
+
+describe("migration 0004 (rename CI columns)", () => {
+  it("keeps rows and keys written under the GitHub column names", async () => {
+    const t = await migratedUntil("0004_rename_ci_columns");
+    try {
+      await t.client.exec(`
+        insert into repos (host, github_repo_id, owner, name, full_name) values ('github', 1, 'acme', 'widgets', 'acme/widgets');
+        insert into workflow_runs (repo_id, ci_source, github_run_id, github_run_attempt, workflow_name, head_sha, status)
+          select id, 'github_actions', 100, 2, 'CI', 'abc', 'completed' from repos;
+      `);
+
+      await t.migrateRest();
+
+      expect((await t.client.query("select external_repo_id from repos")).rows).toEqual([{ external_repo_id: 1 }]);
+      expect((await t.client.query("select ci_run_id, run_attempt from workflow_runs")).rows).toEqual([
+        { ci_run_id: 100, run_attempt: 2 },
+      ]);
+      expect(await failure(t.client, insertRepo("github", 1, "acme/other"))).toContain(
+        "repos_host_external_repo_id_unique",
+      );
+      expect(await failure(t.client, insertRun("github_actions", 100, 2))).toContain("workflow_runs_run_key_unique");
     } finally {
       await t.close();
     }

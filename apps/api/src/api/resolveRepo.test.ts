@@ -17,6 +17,19 @@ describe("resolveRepo", () => {
     }
   });
 
+  it("finds a repo whose full name has more than two segments", async () => {
+    const { db, close } = await createTestDb();
+    try {
+      const repo = await seedRepo(db, { owner: "group/sub", name: "project" });
+      expect(await resolveRepo(db, { fullName: "group/sub/project" })).toEqual({
+        id: repo.id,
+        fullName: "group/sub/project",
+      });
+    } finally {
+      await close();
+    }
+  });
+
   it("throws a not_found ApiError for an unknown repo", async () => {
     const { db, close } = await createTestDb();
     try {
@@ -41,7 +54,7 @@ describe("resolveRepo with more than one host", () => {
     const github = await seedRepo(db);
     await db.execute(sql`alter table repos drop constraint repos_host_check`);
     const { rows } = await db.execute(
-      sql`insert into repos (host, github_repo_id, owner, name, full_name) values ('gitlab', 2, 'acme', 'widgets', 'acme/widgets') returning id`,
+      sql`insert into repos (host, external_repo_id, owner, name, full_name) values ('gitlab', 2, 'acme', 'widgets', 'acme/widgets') returning id`,
     );
     return { db, close, githubId: github.id, gitlabId: Number((rows[0] as { id: number }).id) };
   }

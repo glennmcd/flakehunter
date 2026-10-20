@@ -2,8 +2,8 @@
 export const MAX_REPORT_BYTES = 11 * 1024 * 1024;
 
 /**
- * Largest artifact zip downloaded from GitHub (compressed size). The size GitHub lists is checked before downloading;
- * the downloaded body is checked again, but only after it has been buffered.
+ * Largest artifact zip downloaded from a CI source (compressed size). The size the CI system lists is checked before
+ * downloading; the adapter checks the downloaded body again, but only after it has been buffered.
  */
 export const MAX_ARTIFACT_ZIP_BYTES = 10 * 1024 * 1024;
 
