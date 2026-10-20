@@ -9,7 +9,7 @@ describe("flakyQueries", () => {
     try {
       const [repo] = await db
         .insert(repos)
-        .values({ githubRepoId: 1, owner: "acme", name: "widgets", fullName: "acme/widgets" })
+        .values({ host: "github", externalRepoId: 1, owner: "acme", name: "widgets", fullName: "acme/widgets" })
         .returning({ id: repos.id });
       if (!repo) throw new Error("failed to seed repo");
 
@@ -17,7 +17,8 @@ describe("flakyQueries", () => {
         .insert(workflowRuns)
         .values({
           repoId: repo.id,
-          githubRunId: 1,
+          ciSource: "github_actions",
+          ciRunId: 1,
           workflowName: "CI",
           headSha: "sha1",
           status: "completed",

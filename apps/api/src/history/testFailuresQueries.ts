@@ -1,4 +1,4 @@
-import type { TestFailuresResponse } from "@flakehunter/shared-types";
+import type { v2 } from "@flakehunter/shared-types";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { AnyDb } from "../db/client.js";
 import { testCases, testResults, workflowRuns } from "../db/schema.js";
@@ -6,7 +6,7 @@ import { testCases, testResults, workflowRuns } from "../db/schema.js";
 export const FAILURE_LIMIT = 50;
 
 /** Newest-first failed/error results for one test (at most FAILURE_LIMIT), or null if the test does not exist. */
-export async function getTestFailures(db: AnyDb, testId: number): Promise<TestFailuresResponse | null> {
+export async function getTestFailures(db: AnyDb, testId: number): Promise<v2.TestFailuresResponse | null> {
   const [test] = await db
     .select({ id: testCases.id, repoId: testCases.repoId, classname: testCases.classname, name: testCases.name })
     .from(testCases)
@@ -22,8 +22,9 @@ export async function getTestFailures(db: AnyDb, testId: number): Promise<TestFa
       failureMessage: testResults.failureMessage,
       createdAt: testResults.createdAt,
       runId: workflowRuns.id,
-      githubRunId: workflowRuns.githubRunId,
-      attempt: workflowRuns.githubRunAttempt,
+      ciRunId: workflowRuns.ciRunId,
+      ciSource: workflowRuns.ciSource,
+      attempt: workflowRuns.runAttempt,
       workflowName: workflowRuns.workflowName,
       htmlUrl: workflowRuns.htmlUrl,
     })
@@ -44,7 +45,8 @@ export async function getTestFailures(db: AnyDb, testId: number): Promise<TestFa
       createdAt: new Date(row.createdAt).toISOString(),
       run: {
         id: row.runId,
-        githubRunId: row.githubRunId,
+        ciRunId: row.ciRunId,
+        ciSource: row.ciSource,
         attempt: row.attempt,
         workflowName: row.workflowName,
         htmlUrl: row.htmlUrl,

@@ -106,7 +106,7 @@ describe("flakehunter MCP server", () => {
       headBranch: "main",
       failureMessage: "boom",
       createdAt: "2026-01-01T00:00:00.000Z",
-      run: { id: 1, githubRunId: 2, attempt: 1, workflowName: "CI", htmlUrl: null },
+      run: { id: 1, ciRunId: 2, ciSource: "github_actions" as const, attempt: 1, workflowName: "CI", htmlUrl: null },
     };
 
     it("returns the test and its failures", async () => {
@@ -156,13 +156,13 @@ describe("flakehunter MCP server", () => {
 
 describe("tool inputs match the published OpenAPI document", () => {
   type Param = { name: string; in: string; required?: boolean; schema?: { default?: unknown; maximum?: number } };
-  const spec = JSON.parse(readFileSync(new URL("../../../docs/openapi.json", import.meta.url), "utf8")) as {
+  const spec = JSON.parse(readFileSync(new URL("../../../docs/openapi.v2.json", import.meta.url), "utf8")) as {
     paths: Record<string, { get: { parameters: Param[] } }>;
   };
   const params = (path: string) => spec.paths[path]?.get.parameters ?? [];
 
-  it("list_flaky_tests maps onto the query parameters of GET /api/tests/flaky", () => {
-    const query = params("/api/tests/flaky").filter((p) => p.in === "query");
+  it("list_flaky_tests maps onto the query parameters of GET /api/v2/tests/flaky", () => {
+    const query = params("/api/v2/tests/flaky").filter((p) => p.in === "query");
     for (const field of Object.keys(listFlakyTestsInput)) {
       expect(query.map((p) => p.name)).toContain(field);
     }
@@ -171,8 +171,8 @@ describe("tool inputs match the published OpenAPI document", () => {
     expect(query.find((p) => p.name === "limit")?.schema?.maximum).toBe(200);
   });
 
-  it("get_test_failures takes the numeric test id that GET /api/tests/{id}/failures takes", () => {
+  it("get_test_failures takes the numeric test id that GET /api/v2/tests/{id}/failures takes", () => {
     expect(Object.keys(getTestFailuresInput)).toEqual(["testId"]);
-    expect(params("/api/tests/{id}/failures").map((p) => `${p.in}:${p.name}`)).toEqual(["path:id"]);
+    expect(params("/api/v2/tests/{id}/failures").map((p) => `${p.in}:${p.name}`)).toEqual(["path:id"]);
   });
 });

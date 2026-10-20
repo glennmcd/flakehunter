@@ -17,7 +17,8 @@ const XML = `
 </testsuites>`;
 
 const base = {
-  githubRunId: 500,
+  ciSource: "github_actions" as const,
+  runId: 500,
   attempt: 1,
   headSha: SHA,
   headBranch: "main",
@@ -48,7 +49,7 @@ describe("ingestReport", () => {
       const result = await ingestReport(db, { repoId: repo.id, ...base });
 
       expect(result.duplicate).toBe(false);
-      expect(result.run).toMatchObject({ githubRunId: 500, attempt: 1, headSha: SHA });
+      expect(result.run).toMatchObject({ ciRunId: 500, ciSource: "github_actions", attempt: 1, headSha: SHA });
       expect(result.counts).toEqual({ suites: 1, tests: 3, passed: 1, failed: 1, error: 0, skipped: 1 });
       expect(await count(db, "workflow_runs")).toBe(1);
       expect(await count(db, "test_results")).toBe(3);
@@ -113,7 +114,7 @@ describe("ingestReport", () => {
     const { db, close } = await createTestDb();
     try {
       const repo = await seedRepo(db);
-      const run = await seedRun(db, repo.id, { githubRunId: 500, headSha: SHA, headBranch: "release" });
+      const run = await seedRun(db, repo.id, { ciRunId: 500, headSha: SHA, headBranch: "release" });
       const result = await ingestReport(db, { repoId: repo.id, ...base, headBranch: "main", workflowName: "Upload" });
 
       expect(result.run.id).toBe(run.id);
@@ -128,7 +129,7 @@ describe("ingestReport", () => {
     const { db, close } = await createTestDb();
     try {
       const repo = await seedRepo(db);
-      await seedRun(db, repo.id, { githubRunId: 500, headSha: SHA });
+      await seedRun(db, repo.id, { ciRunId: 500, headSha: SHA });
       await expectApiError(ingestReport(db, { repoId: repo.id, ...base, headSha: "b".repeat(40) }), "validation_error");
       expect(await count(db, "reports")).toBe(0);
       expect(await count(db, "test_results")).toBe(0);
@@ -202,7 +203,7 @@ describe("ingestReport", () => {
       try {
         const repo = await seedRepo(db);
         const original = new Date("2026-01-01T00:00:00.000Z");
-        await seedRun(db, repo.id, { githubRunId: 500, headSha: SHA, createdAt: original });
+        await seedRun(db, repo.id, { ciRunId: 500, headSha: SHA, createdAt: original });
 
         await ingestReport(db, { repoId: repo.id, ...base, timestamp: when });
 

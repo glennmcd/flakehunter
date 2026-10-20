@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import type { RepoHost } from "@flakehunter/shared-types";
 import { and, eq, isNull } from "drizzle-orm";
 import type { AnyDb } from "../db/client.js";
 import { repoApiTokens, repos } from "../db/schema.js";
@@ -22,10 +23,13 @@ export async function revokeRepoToken(db: AnyDb, token: string): Promise<void> {
     .where(eq(repoApiTokens.tokenHash, hashToken(token)));
 }
 
-export async function findRepoByToken(db: AnyDb, token: string): Promise<{ id: number; fullName: string } | null> {
+export async function findRepoByToken(
+  db: AnyDb,
+  token: string,
+): Promise<{ id: number; host: RepoHost; fullName: string } | null> {
   if (!token) return null;
   const [row] = await db
-    .select({ id: repos.id, fullName: repos.fullName })
+    .select({ id: repos.id, host: repos.host, fullName: repos.fullName })
     .from(repoApiTokens)
     .innerJoin(repos, eq(repos.id, repoApiTokens.repoId))
     .where(and(eq(repoApiTokens.tokenHash, hashToken(token)), isNull(repoApiTokens.revokedAt)));

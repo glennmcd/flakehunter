@@ -75,7 +75,9 @@ async function failure(promise: Promise<unknown>): Promise<ApiClientError> {
 describe("client against the real API", () => {
   it("lists repos", async () => {
     const result = await client().listRepos();
-    expect(result.data).toEqual([{ id: repoId, fullName: "acme/widgets", owner: "acme", name: "widgets" }]);
+    expect(result.data).toEqual([
+      { id: repoId, host: "github", fullName: "acme/widgets", owner: "acme", name: "widgets" },
+    ]);
     expect(result.page).toEqual({ limit: 50, offset: 0, total: 1 });
   });
 

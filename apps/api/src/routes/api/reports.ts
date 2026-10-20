@@ -1,21 +1,36 @@
-import { uploadReportHeadersSchema, uploadReportResponseSchema } from "@flakehunter/shared-types";
+import {
+  DEFAULT_CI_SOURCE,
+  type RepoHost,
+  uploadReportHeadersSchema,
+  uploadReportResponseSchema,
+  v2,
+} from "@flakehunter/shared-types";
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { errorResponses } from "../../api/errorResponses.js";
 import { ApiError } from "../../api/errors.js";
+import { toV1Upload } from "../../api/v1.js";
+import type { ApiRouteOptions, ApiVersion } from "../../api/version.js";
 import { findRepoByToken } from "../../auth/repoToken.js";
 import { gzipPreParsing } from "../../http/gzipBody.js";
 import { ingestReport } from "../../ingest/ingestReport.js";
 import { MAX_REPORT_BYTES } from "../../ingest/limits.js";
 
+const IDEMPOTENCY: Record<ApiVersion, string> = {
+  1: "Idempotent on (run id, attempt, report key): the first upload returns 201, a repeat returns 200 with the original counts.",
+  2: "X-FH-CI-Source names the CI system that ran the tests and defaults to the host's own (github_actions for GitHub), so an upload without it is the same run as a v1 upload. Idempotent on (CI source, run id, attempt, report key): the first upload returns 201, a repeat returns 200 with the original counts.",
+};
+
 declare module "fastify" {
   interface FastifyRequest {
     /** Set by the per-repo token check on /api/reports. */
-    repo?: { id: number; fullName: string };
+    repo?: { id: number; host: RepoHost; fullName: string };
   }
 }
 
-const reportsRoute: FastifyPluginAsync = async (fastify) => {
+const reportsRoute: FastifyPluginAsync<ApiRouteOptions> = async (fastify, { apiVersion }) => {
+  const responseSchema = apiVersion === 1 ? uploadReportResponseSchema : v2.uploadReportResponseSchema;
+
   fastify.decorateRequest("repo", undefined);
 
   fastify.addContentTypeParser(
@@ -44,13 +59,12 @@ const reportsRoute: FastifyPluginAsync = async (fastify) => {
       schema: {
         tags: ["reports"],
         summary: "Upload a JUnit XML report",
-        description:
-          "Authenticated with a per-repository upload token (not the read token); the repository comes from the token. Idempotent on (run id, attempt, report key): the first upload returns 201, a repeat returns 200 with the original counts. A SHA that contradicts an existing run is a 400. Unparseable bodies or reports with no testsuite are 422 (invalid_report) and store nothing. Rate limited per IP and per token (429 with Retry-After).",
+        description: `Authenticated with a per-repository upload token (not the read token); the repository comes from the token. ${IDEMPOTENCY[apiVersion]} A SHA that contradicts an existing run is a 400. Unparseable bodies or reports with no testsuite are 422 (invalid_report) and store nothing. Rate limited per IP and per token (429 with Retry-After).`,
         security: [{ uploadToken: [] }],
-        headers: uploadReportHeadersSchema,
+        headers: apiVersion === 1 ? uploadReportHeadersSchema : v2.uploadReportHeadersSchema,
         response: {
-          200: uploadReportResponseSchema.describe("Duplicate upload; counts are those of the original."),
-          201: uploadReportResponseSchema.describe("Report stored."),
+          200: responseSchema.describe("Duplicate upload; counts are those of the original."),
+          201: responseSchema.describe("Report stored."),
           ...errorResponses(400, 401, 413, 422, 429),
         },
       },
@@ -67,9 +81,13 @@ const reportsRoute: FastifyPluginAsync = async (fastify) => {
       }
 
       const h = request.headers;
+      // Only v2 has X-FH-CI-Source; v1 ignores the header if a client sends it.
+      const namedCiSource = apiVersion === 1 ? undefined : (h as v2.UploadReportHeaders)["x-fh-ci-source"];
       const result = await ingestReport(fastify.db, {
         repoId: repo.id,
-        githubRunId: h["x-fh-run-id"],
+        // v1 has no way to name the CI source, and v2 may leave it out: either way the run is from the host's own CI.
+        ciSource: namedCiSource ?? DEFAULT_CI_SOURCE[repo.host],
+        runId: h["x-fh-run-id"],
         attempt: h["x-fh-run-attempt"],
         headSha: h["x-fh-sha"],
         headBranch: h["x-fh-branch"],
@@ -79,7 +97,7 @@ const reportsRoute: FastifyPluginAsync = async (fastify) => {
         timestamp: h["x-fh-timestamp"] ? new Date(h["x-fh-timestamp"]) : undefined,
       });
 
-      return reply.code(result.duplicate ? 200 : 201).send(result);
+      return reply.code(result.duplicate ? 200 : 201).send(apiVersion === 1 ? toV1Upload(result) : result);
     },
   );
 };

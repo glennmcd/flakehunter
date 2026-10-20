@@ -1,22 +1,23 @@
 import { eq, sql } from "drizzle-orm";
+import type { CiRepo, CiSource, CiSourceAdapter } from "../ci/types.js";
 import type { AnyDb } from "../db/client.js";
 import { reports, workflowRuns } from "../db/schema.js";
-import { downloadArtifactZip, listRunArtifacts } from "../github/artifacts.js";
-import type { GithubClient } from "../github/client.js";
 import { insertParsedSuites, summarizeSuites } from "./insertParsedSuites.js";
 import { parseJunitXml } from "./junitParser.js";
 import { ArtifactRejectedError, MAX_ARTIFACT_ZIP_BYTES } from "./limits.js";
 import { extractXmlFiles } from "./zipExtract.js";
 
-/** Report key used for results ingested from a GitHub artifact, so uploads can use their own keys. */
+/**
+ * Report key for results ingested from a CI artifact. The flakehunter-airflow DAG uploads with the same key, so an
+ * upload and a webhook delivery of one run count once; that is why the value keeps its name.
+ */
 export const WEBHOOK_REPORT_KEY = "webhook-artifact";
 
-export interface WorkflowRunInput {
-  repoId: number;
-  owner: string;
-  repo: string;
-  githubRunId: number;
-  githubRunAttempt: number;
+export interface CiRunInput {
+  repo: CiRepo;
+  ciSource: CiSource;
+  runId: number;
+  attempt: number;
   workflowName: string;
   headSha: string;
   headBranch: string | null;
@@ -27,13 +28,22 @@ export interface WorkflowRunInput {
   htmlUrl: string | null;
 }
 
-export async function processWorkflowRun(db: AnyDb, github: GithubClient, input: WorkflowRunInput): Promise<void> {
+export async function processCiRun(db: AnyDb, adapter: CiSourceAdapter, input: CiRunInput): Promise<void> {
+  // Fetching through another system's adapter would use the wrong credentials, or the right ones on the wrong repo.
+  if (adapter.ciSource !== input.ciSource) {
+    throw new Error(`the ${adapter.ciSource} adapter cannot fetch a ${input.ciSource} run`);
+  }
+  if (!adapter.hosts.has(input.repo.host)) {
+    throw new Error(`the ${adapter.ciSource} adapter cannot fetch for a ${input.repo.host} repository`);
+  }
+
   const [run] = await db
     .insert(workflowRuns)
     .values({
-      repoId: input.repoId,
-      githubRunId: input.githubRunId,
-      githubRunAttempt: input.githubRunAttempt,
+      repoId: input.repo.id,
+      ciSource: input.ciSource,
+      ciRunId: input.runId,
+      runAttempt: input.attempt,
       workflowName: input.workflowName,
       headSha: input.headSha,
       headBranch: input.headBranch,
@@ -44,7 +54,7 @@ export async function processWorkflowRun(db: AnyDb, github: GithubClient, input:
       htmlUrl: input.htmlUrl,
     })
     .onConflictDoUpdate({
-      target: [workflowRuns.repoId, workflowRuns.githubRunId, workflowRuns.githubRunAttempt],
+      target: [workflowRuns.repoId, workflowRuns.ciSource, workflowRuns.ciRunId, workflowRuns.runAttempt],
       set: {
         status: input.status,
         conclusion: input.conclusion,
@@ -59,11 +69,7 @@ export async function processWorkflowRun(db: AnyDb, github: GithubClient, input:
   const [existingReport] = await db.select({ id: reports.id }).from(reports).where(eq(reports.runId, run.id)).limit(1);
   if (existingReport) return;
 
-  const artifacts = await listRunArtifacts(github, {
-    owner: input.owner,
-    repo: input.repo,
-    runId: input.githubRunId,
-  });
+  const artifacts = await adapter.listRunArtifacts(input.repo, input.runId);
 
   const artifact = artifacts.find((a) => !a.expired);
   if (!artifact) {
@@ -75,16 +81,9 @@ export async function processWorkflowRun(db: AnyDb, github: GithubClient, input:
     throw new ArtifactRejectedError(`artifact is larger than ${MAX_ARTIFACT_ZIP_BYTES} bytes`);
   }
 
-  const zipBuffer = await downloadArtifactZip(github, {
-    owner: input.owner,
-    repo: input.repo,
-    artifactId: artifact.id,
-    maxBytes: MAX_ARTIFACT_ZIP_BYTES,
-  });
+  const zip = await adapter.downloadArtifact(input.repo, artifact.id, MAX_ARTIFACT_ZIP_BYTES);
 
-  const suites = extractXmlFiles(new Uint8Array(zipBuffer)).flatMap((xmlFile) =>
-    parseJunitXml(xmlFile.contents, xmlFile.fileName),
-  );
+  const suites = extractXmlFiles(zip).flatMap((xmlFile) => parseJunitXml(xmlFile.contents, xmlFile.fileName));
   const counts = summarizeSuites(suites);
 
   await db.transaction(async (tx) => {
@@ -106,7 +105,7 @@ export async function processWorkflowRun(db: AnyDb, github: GithubClient, input:
     // Lost a race with a concurrent delivery or upload: their results stand, ours are dropped.
     if (!report) return;
 
-    await insertParsedSuites(tx, { runId: run.id, repoId: input.repoId, headSha: input.headSha, suites });
+    await insertParsedSuites(tx, { runId: run.id, repoId: input.repo.id, headSha: input.headSha, suites });
     await tx.update(workflowRuns).set({ artifactsFetchedAt: sql`now()` }).where(eq(workflowRuns.id, run.id));
   });
 }

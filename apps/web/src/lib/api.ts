@@ -1,11 +1,4 @@
-import {
-  type ApiErrorCode,
-  errorResponseSchema,
-  flakyTestsResponseSchema,
-  repoSummaryResponseSchema,
-  reposResponseSchema,
-  testHistoryResponseSchema,
-} from "@flakehunter/shared-types";
+import { v2 } from "@flakehunter/shared-types";
 import type { z } from "zod";
 import { loadEnv } from "./env";
 
@@ -13,7 +6,7 @@ import { loadEnv } from "./env";
 // a client component (the token is deliberately not NEXT_PUBLIC_, so it would not exist there anyway).
 
 /** The API's error codes, plus three the client adds for failures that never produced a standard error body. */
-export type ApiClientErrorCode = ApiErrorCode | "network" | "invalid_response" | "unknown";
+export type ApiClientErrorCode = v2.ApiErrorCode | "network" | "invalid_response" | "unknown";
 
 export interface ApiErrorDetail {
   path: string;
@@ -63,7 +56,7 @@ async function toApiError(response: Response): Promise<ApiClientError> {
   } catch {
     body = undefined;
   }
-  const parsed = errorResponseSchema.safeParse(body);
+  const parsed = v2.errorResponseSchema.safeParse(body);
   if (parsed.success) {
     const { error, requestId } = parsed.data;
     return new ApiClientError(error.code, error.message, response.status, requestId, error.details);
@@ -124,10 +117,10 @@ export function createApiClient(config: ApiClientConfig) {
     get,
 
     listRepos: (params: { limit?: number; offset?: number } = {}) =>
-      get("/api/repos", reposResponseSchema, { limit: params.limit, offset: params.offset }),
+      get("/api/v2/repos", v2.reposResponseSchema, { limit: params.limit, offset: params.offset }),
 
     getRepoSummary: (repoId: number, params: { since?: Date | string } = {}) =>
-      get(`/api/repos/${repoId}/summary`, repoSummaryResponseSchema, { since: params.since }),
+      get(`/api/v2/repos/${repoId}/summary`, v2.repoSummaryResponseSchema, { since: params.since }),
 
     getFlakyTests: (params: {
       repo: string | number;
@@ -136,7 +129,7 @@ export function createApiClient(config: ApiClientConfig) {
       limit?: number;
       offset?: number;
     }) =>
-      get("/api/tests/flaky", flakyTestsResponseSchema, {
+      get("/api/v2/tests/flaky", v2.flakyTestsResponseSchema, {
         repo: params.repo,
         since: params.since,
         minRuns: params.minRuns,
@@ -148,7 +141,7 @@ export function createApiClient(config: ApiClientConfig) {
       testId: number,
       params: { since?: Date | string; status?: TestStatus; limit?: number; offset?: number } = {},
     ) =>
-      get(`/api/tests/${testId}/history`, testHistoryResponseSchema, {
+      get(`/api/v2/tests/${testId}/history`, v2.testHistoryResponseSchema, {
         since: params.since,
         status: params.status,
         limit: params.limit,

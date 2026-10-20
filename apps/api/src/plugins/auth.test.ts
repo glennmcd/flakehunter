@@ -20,7 +20,10 @@ async function buildApp() {
   await app.register(authPlugin);
   app.get("/health", async () => ({ ok: true }));
   app.get("/protected", async () => ({ ok: true }));
-  app.post("/api/reports", async () => ({ ok: true }));
+  for (const path of ["/api/reports", "/api/v2/reports"]) app.post(path, async () => ({ ok: true }));
+  for (const path of ["/openapi.json", "/openapi.v2.json", "/docs", "/docs/v2", "/api/repos", "/api/v2/repos"]) {
+    app.get(path, async () => ({ ok: true }));
+  }
   app.post("/webhooks/github", async () => ({ ok: true }));
   return app;
 }
@@ -50,9 +53,21 @@ describe("global auth hook", () => {
     expect((await app.inject({ method: "POST", url: "/api/reports?x=1" })).statusCode).toBe(200);
   });
 
+  it("exempts the upload route, the spec and the docs page of both API versions, and nothing else under them", async () => {
+    const app = await buildApp();
+    expect((await app.inject({ method: "POST", url: "/api/v2/reports?x=1" })).statusCode).toBe(200);
+    for (const url of ["/openapi.json", "/openapi.v2.json", "/docs", "/docs/v2"]) {
+      expect((await app.inject({ method: "GET", url })).statusCode).toBe(200);
+    }
+    for (const url of ["/api/repos", "/api/v2/repos"]) {
+      expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
+    }
+  });
+
   it("does not exempt lookalike paths", async () => {
     const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/api/reports/extra" });
-    expect(res.statusCode).toBe(401);
+    for (const url of ["/api/reports/extra", "/api/v2/reports/extra", "/docs/v3"]) {
+      expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
+    }
   });
 });

@@ -1,11 +1,13 @@
 import type { GithubWorkflowRunEvent } from "@flakehunter/shared-types";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from "fastify";
+import { workflowRunSkipReason } from "../../ci/githubActions/runSource.js";
+import { createWebhookVerifier } from "../../ci/githubActions/webhookVerify.js";
+import { workflowRunToInput } from "../../ci/githubActions/workflowRun.js";
+import type { CiRepo } from "../../ci/types.js";
 import { repos, webhookEvents } from "../../db/schema.js";
-import { workflowRunSkipReason } from "../../github/runSource.js";
-import { createWebhookVerifier } from "../../github/webhookVerify.js";
 import { ArtifactRejectedError } from "../../ingest/limits.js";
-import { processWorkflowRun } from "../../ingest/processWorkflowRun.js";
+import { processCiRun } from "../../ingest/processCiRun.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -85,25 +87,21 @@ async function handleCompletedRun(fastify: FastifyInstance, event: GithubWorkflo
   const skipReason = workflowRunSkipReason(event);
   if (skipReason) return skipReason;
 
-  const [repo] = await fastify.db.select().from(repos).where(eq(repos.githubRepoId, event.repository.id));
-  if (!repo) return `no repo registered for github_repo_id ${event.repository.id}`;
+  const [repo] = await fastify.db
+    .select()
+    .from(repos)
+    .where(and(eq(repos.host, "github"), eq(repos.externalRepoId, event.repository.id)));
+  if (!repo) return `no github repo registered with id ${event.repository.id}`;
 
-  await processWorkflowRun(fastify.db, fastify.github, {
-    repoId: repo.id,
-    // From the registered row, not the payload: the repo id is what was matched, so the name must follow it.
+  // Owner and name from the registered row, not the payload: the repo id is what was matched, so the name must follow it.
+  const ciRepo: CiRepo = {
+    id: repo.id,
+    host: repo.host,
+    externalRepoId: repo.externalRepoId,
     owner: repo.owner,
-    repo: repo.name,
-    githubRunId: event.workflow_run.id,
-    githubRunAttempt: event.workflow_run.run_attempt,
-    workflowName: event.workflow_run.name,
-    headSha: event.workflow_run.head_sha,
-    headBranch: event.workflow_run.head_branch,
-    status: event.workflow_run.status,
-    conclusion: event.workflow_run.conclusion,
-    runStartedAt: event.workflow_run.run_started_at,
-    runCompletedAt: event.workflow_run.updated_at,
-    htmlUrl: event.workflow_run.html_url,
-  });
+    name: repo.name,
+  };
+  await processCiRun(fastify.db, fastify.ciSources.get("github_actions"), workflowRunToInput(event, ciRepo));
   return null;
 }
 

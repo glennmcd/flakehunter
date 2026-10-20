@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { buildApiApp } from "../../../test/apiApp.js";
 import { seedRepo } from "../../../test/fixtures.js";
 import { createTestDb, type TestDb } from "../../../test/testDb.js";
+import { API_VERSIONS, type ApiVersion, apiPrefix } from "../../api/version.js";
 import { mintRepoToken } from "../../auth/repoToken.js";
 import reportsRoute from "./reports.js";
 
@@ -26,11 +27,11 @@ function headers(token: string, extra: Record<string, string> = {}) {
   };
 }
 
-async function setup() {
+async function setup(apiVersion: ApiVersion) {
   const { db, close } = await createTestDb();
   const repo = await seedRepo(db);
   const { token } = await mintRepoToken(db, repo.id);
-  const app = await buildApiApp(db, [reportsRoute]);
+  const app = await buildApiApp(db, [reportsRoute], apiVersion);
   return { db, close, token, app };
 }
 
@@ -39,16 +40,18 @@ async function count(db: TestDb, table: string) {
   return (rows[0] as { n: number }).n;
 }
 
-describe("POST /api/reports with Content-Encoding: gzip", () => {
+describe.each([...API_VERSIONS])("POST /reports with Content-Encoding: gzip (v%d)", (apiVersion) => {
+  const api = apiPrefix(apiVersion);
+
   const gzipHeaders = (token: string, extra: Record<string, string> = {}) =>
     headers(token, { "content-encoding": "gzip", ...extra });
 
   it("ingests a gzip body exactly like the plain one", async () => {
-    const { db, close, token, app } = await setup();
+    const { db, close, token, app } = await setup(apiVersion);
     try {
       const res = await app.inject({
         method: "POST",
-        url: "/api/reports",
+        url: `${api}/reports`,
         headers: gzipHeaders(token),
         payload: gzipSync(XML),
       });
@@ -57,7 +60,7 @@ describe("POST /api/reports with Content-Encoding: gzip", () => {
       expect(await count(db, "test_results")).toBe(2);
 
       // The same run uploaded plain is a duplicate: one idempotency key whatever the encoding.
-      const plain = await app.inject({ method: "POST", url: "/api/reports", headers: headers(token), payload: XML });
+      const plain = await app.inject({ method: "POST", url: `${api}/reports`, headers: headers(token), payload: XML });
       expect(plain.statusCode).toBe(200);
       expect(plain.json()).toMatchObject({ duplicate: true });
     } finally {
@@ -66,12 +69,12 @@ describe("POST /api/reports with Content-Encoding: gzip", () => {
   });
 
   it("accepts x-gzip, any letter case, and an explicit identity encoding", async () => {
-    const { close, token, app } = await setup();
+    const { close, token, app } = await setup(apiVersion);
     try {
       const upload = (runId: string, encoding: string, payload: Buffer | string) =>
         app.inject({
           method: "POST",
-          url: "/api/reports",
+          url: `${api}/reports`,
           headers: headers(token, { "content-encoding": encoding, "x-fh-run-id": runId }),
           payload,
         });
@@ -84,11 +87,16 @@ describe("POST /api/reports with Content-Encoding: gzip", () => {
   });
 
   it("rejects a decompression bomb with 413 once the decompressed size passes the limit, storing nothing", async () => {
-    const { db, close, token, app } = await setup();
+    const { db, close, token, app } = await setup(apiVersion);
     try {
       const bomb = gzipSync(Buffer.alloc(12 * MIB, "a"));
       expect(bomb.length).toBeLessThan(64 * 1024);
-      const res = await app.inject({ method: "POST", url: "/api/reports", headers: gzipHeaders(token), payload: bomb });
+      const res = await app.inject({
+        method: "POST",
+        url: `${api}/reports`,
+        headers: gzipHeaders(token),
+        payload: bomb,
+      });
       expect(res.statusCode).toBe(413);
       expect(res.json<unknown>()).toMatchObject({ error: { code: "payload_too_large" } });
       expect(await count(db, "test_results")).toBe(0);
@@ -98,11 +106,11 @@ describe("POST /api/reports with Content-Encoding: gzip", () => {
   });
 
   it("returns 400 for data that is not gzip, and for a truncated gzip stream", async () => {
-    const { close, token, app } = await setup();
+    const { close, token, app } = await setup(apiVersion);
     try {
       const notGzip = await app.inject({
         method: "POST",
-        url: "/api/reports",
+        url: `${api}/reports`,
         headers: gzipHeaders(token),
         payload: XML,
       });
@@ -114,7 +122,7 @@ describe("POST /api/reports with Content-Encoding: gzip", () => {
       const whole = gzipSync(XML);
       const truncated = await app.inject({
         method: "POST",
-        url: "/api/reports",
+        url: `${api}/reports`,
         headers: gzipHeaders(token),
         payload: whole.subarray(0, whole.length - 8),
       });
@@ -126,12 +134,12 @@ describe("POST /api/reports with Content-Encoding: gzip", () => {
   });
 
   it("rejects other encodings with a 400 naming the header", async () => {
-    const { close, token, app } = await setup();
+    const { close, token, app } = await setup(apiVersion);
     try {
       for (const encoding of ["br", "deflate", "gzip, br", "gzip, gzip"]) {
         const res = await app.inject({
           method: "POST",
-          url: "/api/reports",
+          url: `${api}/reports`,
           headers: headers(token, { "content-encoding": encoding }),
           payload: gzipSync(XML),
         });
@@ -146,11 +154,11 @@ describe("POST /api/reports with Content-Encoding: gzip", () => {
   });
 
   it("checks the token before decompressing anything", async () => {
-    const { db, close, app } = await setup();
+    const { db, close, app } = await setup(apiVersion);
     try {
       const res = await app.inject({
         method: "POST",
-        url: "/api/reports",
+        url: `${api}/reports`,
         headers: gzipHeaders("fh_not_a_real_token"),
         payload: gzipSync(Buffer.alloc(12 * MIB, "a")),
       });
@@ -162,11 +170,11 @@ describe("POST /api/reports with Content-Encoding: gzip", () => {
   });
 
   it("still reports a plain body over the limit as 413", async () => {
-    const { close, token, app } = await setup();
+    const { close, token, app } = await setup(apiVersion);
     try {
       const res = await app.inject({
         method: "POST",
-        url: "/api/reports",
+        url: `${api}/reports`,
         headers: headers(token),
         payload: Buffer.alloc(12 * MIB, "a"),
       });

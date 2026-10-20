@@ -23,7 +23,9 @@ const json = (body: unknown, status = 200) =>
 
 const page = { limit: 50, offset: 0, total: 1 };
 const repos = {
-  data: [{ id: 3, fullName: "flakehunter-demo/storefront", owner: "flakehunter-demo", name: "storefront" }],
+  data: [
+    { id: 3, host: "github", fullName: "flakehunter-demo/storefront", owner: "flakehunter-demo", name: "storefront" },
+  ],
   page,
 };
 const summary = {
@@ -58,7 +60,7 @@ const history = {
       durationSeconds: 1.2,
       failureMessage: "Read timed out",
       createdAt: "2026-10-01T10:00:00.000Z",
-      run: { id: 4, githubRunId: 1422072702, attempt: 2, workflowName: "CI", htmlUrl: null },
+      run: { id: 4, ciRunId: 1422072702, ciSource: "github_actions", attempt: 2, workflowName: "CI", htmlUrl: null },
     },
   ],
   page,
@@ -82,10 +84,10 @@ describe("request building", () => {
     const { calls, fetch } = fakeFetch(() => json(repos));
     const api = createApiClient({ apiBaseUrl: BASE, apiToken: TOKEN, fetch });
 
-    await api.get("/api/repos", z.object({ data: z.array(z.unknown()) }));
+    await api.get("/api/v2/repos", z.object({ data: z.array(z.unknown()) }));
 
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe("http://localhost:3000/api/repos");
+    expect(calls[0]?.url).toBe("http://localhost:3000/api/v2/repos");
     expect(calls[0]?.init.method).toBe("GET");
     expect(calls[0]?.init.cache).toBe("no-store");
     expect(calls[0]?.init.headers).toEqual({ authorization: `Bearer ${TOKEN}`, accept: "application/json" });
@@ -94,7 +96,7 @@ describe("request building", () => {
   it("joins onto a base URL that has a path prefix", async () => {
     const { calls, fetch } = fakeFetch(() => json(repos));
     await createApiClient({ apiBaseUrl: "https://example.com/proxy", apiToken: TOKEN, fetch }).listRepos();
-    expect(calls[0]?.url).toBe("https://example.com/proxy/api/repos");
+    expect(calls[0]?.url).toBe("https://example.com/proxy/api/v2/repos");
   });
 
   it("leaves out undefined query values and serialises dates as ISO strings", async () => {
@@ -104,8 +106,8 @@ describe("request building", () => {
     await api.getRepoSummary(3, { since: new Date("2026-09-01T00:00:00.000Z") });
     await api.getRepoSummary(3, {});
 
-    expect(calls[0]?.url).toBe("http://localhost:3000/api/repos/3/summary?since=2026-09-01T00%3A00%3A00.000Z");
-    expect(calls[1]?.url).toBe("http://localhost:3000/api/repos/3/summary");
+    expect(calls[0]?.url).toBe("http://localhost:3000/api/v2/repos/3/summary?since=2026-09-01T00%3A00%3A00.000Z");
+    expect(calls[1]?.url).toBe("http://localhost:3000/api/v2/repos/3/summary");
   });
 });
 
@@ -117,7 +119,7 @@ describe("endpoint wrappers", () => {
       offset: 40,
     });
 
-    expect(calls[0]?.url).toBe("http://localhost:3000/api/repos?limit=20&offset=40");
+    expect(calls[0]?.url).toBe("http://localhost:3000/api/v2/repos?limit=20&offset=40");
     expect(result.data[0]?.fullName).toBe("flakehunter-demo/storefront");
     expect(result.page.total).toBe(1);
   });
@@ -133,7 +135,7 @@ describe("endpoint wrappers", () => {
     });
 
     expect(calls[0]?.url).toBe(
-      "http://localhost:3000/api/tests/flaky?repo=flakehunter-demo%2Fstorefront&since=2026-09-01T00%3A00%3A00.000Z&minRuns=1&limit=25&offset=25",
+      "http://localhost:3000/api/v2/tests/flaky?repo=flakehunter-demo%2Fstorefront&since=2026-09-01T00%3A00%3A00.000Z&minRuns=1&limit=25&offset=25",
     );
     expect(result.data[0]).toMatchObject({ testId: 63, name: "retriesOnTimeout", flakyShas: 22 });
   });
@@ -141,7 +143,7 @@ describe("endpoint wrappers", () => {
   it("getFlakyTests accepts a numeric repo id", async () => {
     const { calls, fetch } = fakeFetch(() => json(flaky));
     await createApiClient({ apiBaseUrl: BASE, apiToken: TOKEN, fetch }).getFlakyTests({ repo: 3 });
-    expect(calls[0]?.url).toBe("http://localhost:3000/api/tests/flaky?repo=3");
+    expect(calls[0]?.url).toBe("http://localhost:3000/api/v2/tests/flaky?repo=3");
   });
 
   it("getRepoSummary returns typed totals", async () => {
@@ -158,7 +160,7 @@ describe("endpoint wrappers", () => {
       limit: 200,
     });
 
-    expect(calls[0]?.url).toBe("http://localhost:3000/api/tests/63/history?status=error&limit=200");
+    expect(calls[0]?.url).toBe("http://localhost:3000/api/v2/tests/63/history?status=error&limit=200");
     expect(result.test.name).toBe("retriesOnTimeout");
     expect(result.data[0]?.run.attempt).toBe(2);
   });
@@ -248,7 +250,7 @@ describe("apiClientFromEnv", () => {
 
     await api.listRepos();
 
-    expect(calls[0]?.url).toBe("http://api.test:3000/api/repos");
+    expect(calls[0]?.url).toBe("http://api.test:3000/api/v2/repos");
     const headers = calls[0]?.init.headers as Record<string, string> | undefined;
     expect(headers?.authorization).toBe(`Bearer ${TOKEN}`);
   });

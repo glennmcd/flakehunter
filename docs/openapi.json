@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FlakeHunter API",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Ingests JUnit XML reports and reports flaky tests. A test is flaky on a commit when it has both a pass and a fail (or error) on the same commit SHA. Every error uses the same body: `{ error: { code, message, details? }, requestId }`. Lists take `?limit=&offset=` and return `{ data, page: { limit, offset, total } }`."
   },
   "components": {
@@ -27,7 +27,7 @@
         "tags": [
           "tests"
         ],
-        "description": "Flake rate = flaky SHAs / SHAs run in the window (skipped results ignored). Only tests with at least minRuns SHAs and one flaky SHA appear, most flaky first. repo is owner/name or a numeric id.",
+        "description": "Flake rate = flaky SHAs / SHAs run in the window (skipped results ignored). Only tests with at least minRuns SHAs and one flaky SHA appear, most flaky first. repo is owner/name or a numeric id.\n\nDeprecated since 2026-10-19: use the same operation under /api/v2 (/openapi.v2.json, /docs/v2).",
         "parameters": [
           {
             "schema": {
@@ -169,6 +169,22 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "400": {
@@ -232,6 +248,22 @@
                     "requestId"
                   ],
                   "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
                 }
               }
             }
@@ -299,6 +331,22 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "404": {
@@ -364,9 +412,26 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/repos/{id}/summary": {
@@ -375,7 +440,7 @@
         "tags": [
           "repos"
         ],
-        "description": "Windowed totals for a repository. lastRunAt ignores the window.",
+        "description": "Windowed totals for a repository. lastRunAt ignores the window.\n\nDeprecated since 2026-10-19: use the same operation under /api/v2 (/openapi.v2.json, /docs/v2).",
         "parameters": [
           {
             "schema": {
@@ -497,6 +562,22 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "400": {
@@ -560,6 +641,22 @@
                     "requestId"
                   ],
                   "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
                 }
               }
             }
@@ -627,6 +724,22 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "404": {
@@ -692,9 +805,26 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/reports": {
@@ -703,7 +833,7 @@
         "tags": [
           "reports"
         ],
-        "description": "Authenticated with a per-repository upload token (not the read token); the repository comes from the token. Idempotent on (run id, attempt, report key): the first upload returns 201, a repeat returns 200 with the original counts. A SHA that contradicts an existing run is a 400. Unparseable bodies or reports with no testsuite are 422 (invalid_report) and store nothing. Rate limited per IP and per token (429 with Retry-After).",
+        "description": "Authenticated with a per-repository upload token (not the read token); the repository comes from the token. Idempotent on (run id, attempt, report key): the first upload returns 201, a repeat returns 200 with the original counts. A SHA that contradicts an existing run is a 400. Unparseable bodies or reports with no testsuite are 422 (invalid_report) and store nothing. Rate limited per IP and per token (429 with Retry-After).\n\nDeprecated since 2026-10-19: use the same operation under /api/v2 (/openapi.v2.json, /docs/v2).",
         "parameters": [
           {
             "schema": {
@@ -888,6 +1018,22 @@
                   "description": "Duplicate upload; counts are those of the original."
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "201": {
@@ -984,6 +1130,22 @@
                   "description": "Report stored."
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "400": {
@@ -1047,6 +1209,22 @@
                     "requestId"
                   ],
                   "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
                 }
               }
             }
@@ -1114,6 +1292,22 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "413": {
@@ -1177,6 +1371,22 @@
                     "requestId"
                   ],
                   "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
                 }
               }
             }
@@ -1244,6 +1454,22 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "429": {
@@ -1309,6 +1535,22 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           }
         },
@@ -1329,7 +1571,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/repos": {
@@ -1338,7 +1581,7 @@
         "tags": [
           "repos"
         ],
-        "description": "Paginated, ordered by full name. Use it to find a repository's numeric id.",
+        "description": "Paginated, ordered by full name. Use it to find a repository's numeric id.\n\nDeprecated since 2026-10-19: use the same operation under /api/v2 (/openapi.v2.json, /docs/v2).",
         "parameters": [
           {
             "schema": {
@@ -1434,6 +1677,22 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "400": {
@@ -1497,6 +1756,22 @@
                     "requestId"
                   ],
                   "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
                 }
               }
             }
@@ -1564,9 +1839,26 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/tests/{id}/failures": {
@@ -1575,7 +1867,7 @@
         "tags": [
           "tests"
         ],
-        "description": "The 50 most recent failed or errored results for a test, newest first, with run details. Not paginated; never includes failure stack traces.",
+        "description": "The 50 most recent failed or errored results for a test, newest first, with run details. Not paginated; never includes failure stack traces.\n\nDeprecated since 2026-10-19: use the same operation under /api/v2 (/openapi.v2.json, /docs/v2).",
         "parameters": [
           {
             "schema": {
@@ -1717,6 +2009,22 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "400": {
@@ -1780,6 +2088,22 @@
                     "requestId"
                   ],
                   "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
                 }
               }
             }
@@ -1847,6 +2171,22 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "404": {
@@ -1912,9 +2252,26 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/tests/{id}/history": {
@@ -1923,7 +2280,7 @@
         "tags": [
           "tests"
         ],
-        "description": "Results for one test, newest first. Never includes failure stack traces.",
+        "description": "Results for one test, newest first. Never includes failure stack traces.\n\nDeprecated since 2026-10-19: use the same operation under /api/v2 (/openapi.v2.json, /docs/v2).",
         "parameters": [
           {
             "schema": {
@@ -2153,6 +2510,22 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "400": {
@@ -2216,6 +2589,22 @@
                     "requestId"
                   ],
                   "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
                 }
               }
             }
@@ -2283,6 +2672,22 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           },
           "404": {
@@ -2348,9 +2753,26 @@
                   "additionalProperties": false
                 }
               }
+            },
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745: v1 is deprecated, since the given Unix time.",
+                "schema": {
+                  "type": "string",
+                  "const": "@1792368000"
+                }
+              },
+              "Link": {
+                "description": "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+                "schema": {
+                  "type": "string",
+                  "const": "</openapi.v2.json>; rel=\"successor-version\", </docs/v2>; rel=\"deprecation\""
+                }
+              }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     }
   },

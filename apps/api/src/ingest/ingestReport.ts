@@ -1,3 +1,4 @@
+import type { CiSource } from "@flakehunter/shared-types";
 import { and, eq } from "drizzle-orm";
 import { ApiError } from "../api/errors.js";
 import type { AnyDb } from "../db/client.js";
@@ -7,7 +8,8 @@ import { type ParsedSuite, parseJunitXml } from "./junitParser.js";
 
 export interface IngestReportInput {
   repoId: number;
-  githubRunId: number;
+  ciSource: CiSource;
+  runId: number;
   attempt: number;
   headSha: string;
   headBranch?: string;
@@ -19,7 +21,7 @@ export interface IngestReportInput {
 }
 
 export interface IngestReportResult {
-  run: { id: number; githubRunId: number; attempt: number; headSha: string };
+  run: { id: number; ciRunId: number; ciSource: CiSource; attempt: number; headSha: string };
   duplicate: boolean;
   counts: ReportCounts;
 }
@@ -38,7 +40,7 @@ function parseReport(xml: string): ParsedSuite[] {
 }
 
 /**
- * Ingests one uploaded JUnit report, idempotent on (repo, run id, attempt, report key): a repeat returns the
+ * Ingests one uploaded JUnit report, idempotent on (repo, CI source, run id, attempt, report key): a repeat returns the
  * original counts and writes nothing. The run row, report row and all results commit together or not at all.
  */
 export async function ingestReport(db: AnyDb, input: IngestReportInput): Promise<IngestReportResult> {
@@ -52,8 +54,9 @@ export async function ingestReport(db: AnyDb, input: IngestReportInput): Promise
       .insert(workflowRuns)
       .values({
         repoId: input.repoId,
-        githubRunId: input.githubRunId,
-        githubRunAttempt: input.attempt,
+        ciSource: input.ciSource,
+        ciRunId: input.runId,
+        runAttempt: input.attempt,
         workflowName: input.workflowName,
         headSha,
         headBranch: input.headBranch,
@@ -73,8 +76,9 @@ export async function ingestReport(db: AnyDb, input: IngestReportInput): Promise
           .where(
             and(
               eq(workflowRuns.repoId, input.repoId),
-              eq(workflowRuns.githubRunId, input.githubRunId),
-              eq(workflowRuns.githubRunAttempt, input.attempt),
+              eq(workflowRuns.ciSource, input.ciSource),
+              eq(workflowRuns.ciRunId, input.runId),
+              eq(workflowRuns.runAttempt, input.attempt),
             ),
           )
       )[0];
@@ -82,11 +86,17 @@ export async function ingestReport(db: AnyDb, input: IngestReportInput): Promise
 
     if (run.headSha.toLowerCase() !== headSha) {
       throw new ApiError("validation_error", "X-FH-Sha does not match the commit already recorded for this run", [
-        { path: "headers.x-fh-sha", message: `run ${input.githubRunId} is recorded against ${run.headSha}` },
+        { path: "headers.x-fh-sha", message: `run ${input.runId} is recorded against ${run.headSha}` },
       ]);
     }
 
-    const runInfo = { id: run.id, githubRunId: run.githubRunId, attempt: run.githubRunAttempt, headSha: run.headSha };
+    const runInfo = {
+      id: run.id,
+      ciRunId: run.ciRunId,
+      ciSource: run.ciSource,
+      attempt: run.runAttempt,
+      headSha: run.headSha,
+    };
 
     const [report] = await tx
       .insert(reports)

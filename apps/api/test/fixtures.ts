@@ -1,13 +1,24 @@
+import type { CiSource, RepoHost } from "@flakehunter/shared-types";
 import { and, eq } from "drizzle-orm";
+import type { ApiVersion } from "../src/api/version.js";
 import { repos, testCases, testResults, testSuites, workflowRuns } from "../src/db/schema.js";
 import type { TestDb } from "./testDb.js";
 
-export async function seedRepo(db: TestDb, overrides: { githubRepoId?: number; owner?: string; name?: string } = {}) {
+export async function seedRepo(
+  db: TestDb,
+  overrides: { host?: RepoHost; externalRepoId?: number; owner?: string; name?: string } = {},
+) {
   const owner = overrides.owner ?? "acme";
   const name = overrides.name ?? "widgets";
   const [repo] = await db
     .insert(repos)
-    .values({ githubRepoId: overrides.githubRepoId ?? 1, owner, name, fullName: `${owner}/${name}` })
+    .values({
+      host: overrides.host ?? "github",
+      externalRepoId: overrides.externalRepoId ?? 1,
+      owner,
+      name,
+      fullName: `${owner}/${name}`,
+    })
     .returning();
   if (!repo) throw new Error("failed to seed repo");
   return repo;
@@ -17,8 +28,9 @@ export async function seedRun(
   db: TestDb,
   repoId: number,
   overrides: {
-    githubRunId?: number;
-    githubRunAttempt?: number;
+    ciSource?: CiSource;
+    ciRunId?: number;
+    runAttempt?: number;
     headSha?: string;
     headBranch?: string;
     createdAt?: Date;
@@ -28,8 +40,9 @@ export async function seedRun(
     .insert(workflowRuns)
     .values({
       repoId,
-      githubRunId: overrides.githubRunId ?? 1,
-      githubRunAttempt: overrides.githubRunAttempt ?? 1,
+      ciSource: overrides.ciSource ?? "github_actions",
+      ciRunId: overrides.ciRunId ?? 1,
+      runAttempt: overrides.runAttempt ?? 1,
       workflowName: "CI",
       headSha: overrides.headSha ?? "a".repeat(40),
       headBranch: overrides.headBranch ?? "main",
@@ -77,7 +90,7 @@ export async function seedResult(
   const run =
     input.runId !== undefined
       ? { id: input.runId }
-      : await seedRun(db, repoId, { githubRunId: nextRunId++, headSha: input.headSha, createdAt: input.createdAt });
+      : await seedRun(db, repoId, { ciRunId: nextRunId++, headSha: input.headSha, createdAt: input.createdAt });
 
   const [suite] = await db.insert(testSuites).values({ runId: run.id, suiteName: "suite" }).returning();
   if (!suite) throw new Error("failed to seed suite");
@@ -107,4 +120,9 @@ export function daysAgo(days: number): Date {
 
 export function sha(n: number): string {
   return n.toString(16).padStart(40, "0");
+}
+
+/** How a `run` object names its CI run in each API version: v1 `githubRunId`, v2 `ciRunId` with the CI source. */
+export function runIdentity(apiVersion: ApiVersion, ciRunId: unknown, ciSource: CiSource = "github_actions") {
+  return apiVersion === 1 ? { githubRunId: ciRunId } : { ciRunId, ciSource };
 }

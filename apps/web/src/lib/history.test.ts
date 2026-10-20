@@ -24,7 +24,7 @@ function item(over: Partial<HistoryItem> = {}): HistoryItem {
     durationSeconds: 1,
     failureMessage: null,
     createdAt: "2026-03-30T12:00:00.000Z",
-    run: { id: 1, githubRunId: 100, attempt: 1, workflowName: "CI", htmlUrl: null },
+    run: { id: 1, ciRunId: 100, ciSource: "github_actions", attempt: 1, workflowName: "CI", htmlUrl: null },
     ...over,
   };
 }

@@ -34,7 +34,7 @@ describe("seeding the demo through the real ingestion path", () => {
   it("makes the planned tests flaky, leaves the rest alone, and re-seeding is a no-op", async () => {
     const { db, close } = await createTestDb();
     try {
-      const repo = await seedRepo(db, { githubRepoId: 4242, owner: "flakehunter-demo", name: "storefront" });
+      const repo = await seedRepo(db, { externalRepoId: 4242, owner: "flakehunter-demo", name: "storefront" });
       const { token } = await mintRepoToken(db, repo.id);
       const app = await buildApp({ db, logger: false, rateLimit: { max: 1_000_000 } });
       const read = { authorization: `Bearer ${API_TOKEN}` };

@@ -23,7 +23,7 @@ describe("seeding against an API with a small upload rate limit", () => {
   it("waits out the 429s and stores every report once", async () => {
     const { db, close } = await createTestDb();
     try {
-      const repo = await seedRepo(db, { githubRepoId: 4243, owner: "flakehunter-demo", name: "storefront" });
+      const repo = await seedRepo(db, { externalRepoId: 4243, owner: "flakehunter-demo", name: "storefront" });
       const { token } = await mintRepoToken(db, repo.id);
       // 4 uploads per 1 second window; the demo history below has several times that.
       const app = await buildApp({ db, logger: false, rateLimit: { max: 4, windowSeconds: 1 } });

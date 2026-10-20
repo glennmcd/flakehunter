@@ -3,11 +3,12 @@ import type { FastifyPluginAsync } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { errorResponses } from "../../api/errorResponses.js";
 import { resolveRepo } from "../../api/resolveRepo.js";
+import type { ApiRouteOptions } from "../../api/version.js";
 import { getRepoSummary } from "../../summary/repoSummaryQueries.js";
 
 const DEFAULT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
-const repoSummaryRoute: FastifyPluginAsync = async (fastify) => {
+const repoSummaryRoute: FastifyPluginAsync<ApiRouteOptions> = async (fastify) => {
   fastify.withTypeProvider<ZodTypeProvider>().get(
     "/repos/:id/summary",
     {

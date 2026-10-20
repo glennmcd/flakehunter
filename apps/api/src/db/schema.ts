@@ -1,3 +1,4 @@
+import { CI_SOURCES, REPO_HOSTS } from "@flakehunter/shared-types";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -14,14 +15,24 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 
-export const repos = pgTable("repos", {
-  id: bigserial("id", { mode: "number" }).primaryKey(),
-  githubRepoId: bigint("github_repo_id", { mode: "number" }).notNull().unique(),
-  owner: text("owner").notNull(),
-  name: text("name").notNull(),
-  fullName: text("full_name").notNull().unique(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const repos = pgTable(
+  "repos",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    host: text("host", { enum: REPO_HOSTS }).notNull(),
+    // The host's own id for the repository.
+    externalRepoId: bigint("external_repo_id", { mode: "number" }).notNull(),
+    owner: text("owner").notNull(),
+    name: text("name").notNull(),
+    fullName: text("full_name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("repos_host_check", sql`${table.host} IN ('github')`),
+    unique().on(table.host, table.externalRepoId),
+    unique().on(table.host, table.fullName),
+  ],
+);
 
 export const githubInstallations = pgTable("github_installations", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
@@ -48,8 +59,10 @@ export const workflowRuns = pgTable(
     repoId: bigint("repo_id", { mode: "number" })
       .notNull()
       .references(() => repos.id),
-    githubRunId: bigint("github_run_id", { mode: "number" }).notNull(),
-    githubRunAttempt: integer("github_run_attempt").notNull().default(1),
+    ciSource: text("ci_source", { enum: CI_SOURCES }).notNull(),
+    // The CI system's own run id and attempt.
+    ciRunId: bigint("ci_run_id", { mode: "number" }).notNull(),
+    runAttempt: integer("run_attempt").notNull().default(1),
     workflowName: text("workflow_name").notNull(),
     headSha: text("head_sha").notNull(),
     headBranch: text("head_branch"),
@@ -62,7 +75,9 @@ export const workflowRuns = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    unique().on(table.repoId, table.githubRunId, table.githubRunAttempt),
+    check("workflow_runs_ci_source_check", sql`${table.ciSource} IN ('github_actions')`),
+    // Runs from different CI systems can share an id and attempt, so the CI source is part of the key.
+    unique("workflow_runs_run_key_unique").on(table.repoId, table.ciSource, table.ciRunId, table.runAttempt),
     index("idx_workflow_runs_repo_sha").on(table.repoId, table.headSha),
   ],
 );

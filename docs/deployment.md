@@ -114,7 +114,7 @@ days using `X-FH-Timestamp`, so history, `since` filters and trends have somethi
 1. Register the demo repo and mint its upload token (once):
 
    ```bash
-   SEED_REPO_OWNER=flakehunter-demo SEED_REPO_NAME=storefront SEED_REPO_GITHUB_ID=900000001 \
+   SEED_REPO_OWNER=flakehunter-demo SEED_REPO_NAME=storefront SEED_REPO_EXTERNAL_ID=900000001 \
      bun run --env-file=apps/api/.env scripts/seed-dev-repo.ts
    TOKEN_REPO_FULL_NAME=flakehunter-demo/storefront \
      bun run --env-file=apps/api/.env scripts/create-repo-token.ts
@@ -140,7 +140,7 @@ FlakeHunter needs a `repos` row before it will ingest anything from a given GitH
 with:
 
 ```bash
-SEED_REPO_OWNER=<owner> SEED_REPO_NAME=<repo> SEED_REPO_GITHUB_ID=<github numeric repo id> \
+SEED_REPO_OWNER=<owner> SEED_REPO_NAME=<repo> SEED_REPO_EXTERNAL_ID=<github numeric repo id> \
   bun run --env-file=apps/api/.env scripts/seed-dev-repo.ts
 ```
 
@@ -259,7 +259,7 @@ export POOLED_DATABASE_URL='postgres://...-pooler...'
 DATABASE_URL="$DIRECT_DATABASE_URL" bun run db:migrate
 
 DATABASE_URL="$DIRECT_DATABASE_URL" \
-SEED_REPO_OWNER=flakehunter-demo SEED_REPO_NAME=storefront SEED_REPO_GITHUB_ID=900000001 \
+SEED_REPO_OWNER=flakehunter-demo SEED_REPO_NAME=storefront SEED_REPO_EXTERNAL_ID=900000001 \
   bun run scripts/seed-dev-repo.ts
 
 DATABASE_URL="$DIRECT_DATABASE_URL" TOKEN_REPO_FULL_NAME=flakehunter-demo/storefront \

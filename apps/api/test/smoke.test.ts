@@ -7,7 +7,8 @@ describe("testDb", () => {
     const { db, close } = await createTestDb();
     try {
       await db.insert(repos).values({
-        githubRepoId: 1,
+        host: "github",
+        externalRepoId: 1,
         owner: "glennmcd",
         name: "FlakeHunter",
         fullName: "glennmcd/FlakeHunter",

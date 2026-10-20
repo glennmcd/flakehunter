@@ -1,11 +1,11 @@
 import Fastify from "fastify";
 import { serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
+import type { CiSourceRegistry } from "./ci/registry.js";
 import type { AnyDb, Db } from "./db/client.js";
-import type { GithubClient } from "./github/client.js";
 import authPlugin from "./plugins/auth.js";
+import ciSourcesPlugin from "./plugins/ciSources.js";
 import dbPlugin from "./plugins/db.js";
 import errorHandlerPlugin from "./plugins/errorHandler.js";
-import githubPlugin from "./plugins/github.js";
 import openapiPlugin from "./plugins/openapi.js";
 import rateLimitPlugin, { type RateLimitPluginOptions } from "./plugins/rateLimit.js";
 import { registerRoutes } from "./routes/index.js";
@@ -16,8 +16,8 @@ export interface BuildAppOptions {
   logger?: boolean;
   /** Override the upload rate limit (tests); by default it comes from the environment. */
   rateLimit?: RateLimitPluginOptions;
-  /** Use this GitHub client instead of one built from GITHUB_PAT (tests pass a fake). */
-  github?: GithubClient;
+  /** Use these CI adapters instead of the ones built from GITHUB_PAT (tests pass fakes). */
+  ciSources?: CiSourceRegistry;
 }
 
 export async function buildApp(options: BuildAppOptions = {}) {
@@ -34,7 +34,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     await fastify.register(dbPlugin);
   }
   await fastify.register(authPlugin);
-  await fastify.register(githubPlugin, { client: options.github });
+  await fastify.register(ciSourcesPlugin, { registry: options.ciSources });
   await fastify.register(rateLimitPlugin, options.rateLimit ?? {});
   // Before the routes, so swagger sees them as they register.
   await fastify.register(openapiPlugin);

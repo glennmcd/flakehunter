@@ -174,8 +174,8 @@ describe("getFlakeRanking", () => {
   it("is scoped to the requested repo", async () => {
     const { db, close } = await createTestDb();
     try {
-      const a = await seedRepo(db, { githubRepoId: 1, name: "a" });
-      const b = await seedRepo(db, { githubRepoId: 2, name: "b" });
+      const a = await seedRepo(db, { externalRepoId: 1, name: "a" });
+      const b = await seedRepo(db, { externalRepoId: 2, name: "b" });
       await seedFlakySha(db, a.id, "only in a", sha(1));
 
       expect((await getFlakeRanking(db, { repoId: a.id, ...query })).total).toBe(1);
