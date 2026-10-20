@@ -25,7 +25,7 @@ bun run openapi:generate # rewrite docs/openapi.v2.json after changing a route s
 bun run synth:infra      # bundle the API Lambda and synthesize both CloudFormation stacks (CI runs it; deploys nothing)
 ```
 
-CI (`.github/workflows/ci.yml`) runs `lint`, `typecheck`, `test`, `build:web` and `synth:infra` on every PR and every push to `main`. Biome config is in `biome.json`: 2-space indent, double quotes, 120-character lines.
+CI (`.github/workflows/ci.yml`) runs `lint`, `typecheck`, `test`, `build:web` and `synth:infra` on every PR and every push to `main`, except release-please's release PR and its `chore(main): release` merge: those get a short `release` job that fails unless only the version and changelog files changed, then runs `scripts/releaseConfig.test.ts`. Biome config is in `biome.json`: 2-space indent, double quotes, 120-character lines.
 
 To run a subset of tests, use `bun test` with a path or name. The test DB helper resolves migrations relative to its own file, so the working directory does not matter (this also holds when debugging):
 
