@@ -22,8 +22,8 @@ export async function getTestFailures(db: AnyDb, testId: number): Promise<TestFa
       failureMessage: testResults.failureMessage,
       createdAt: testResults.createdAt,
       runId: workflowRuns.id,
-      githubRunId: workflowRuns.githubRunId,
-      attempt: workflowRuns.githubRunAttempt,
+      githubRunId: workflowRuns.ciRunId,
+      attempt: workflowRuns.runAttempt,
       workflowName: workflowRuns.workflowName,
       htmlUrl: workflowRuns.htmlUrl,
     })

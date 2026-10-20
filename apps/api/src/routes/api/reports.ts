@@ -1,4 +1,9 @@
-import { uploadReportHeadersSchema, uploadReportResponseSchema } from "@flakehunter/shared-types";
+import {
+  DEFAULT_CI_SOURCE,
+  type RepoHost,
+  uploadReportHeadersSchema,
+  uploadReportResponseSchema,
+} from "@flakehunter/shared-types";
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { errorResponses } from "../../api/errorResponses.js";
@@ -11,7 +16,7 @@ import { MAX_REPORT_BYTES } from "../../ingest/limits.js";
 declare module "fastify" {
   interface FastifyRequest {
     /** Set by the per-repo token check on /api/reports. */
-    repo?: { id: number; fullName: string };
+    repo?: { id: number; host: RepoHost; fullName: string };
   }
 }
 
@@ -69,7 +74,9 @@ const reportsRoute: FastifyPluginAsync = async (fastify) => {
       const h = request.headers;
       const result = await ingestReport(fastify.db, {
         repoId: repo.id,
-        githubRunId: h["x-fh-run-id"],
+        // v1 has no way to name the CI source, so a run is taken to be from the host's own CI.
+        ciSource: DEFAULT_CI_SOURCE[repo.host],
+        runId: h["x-fh-run-id"],
         attempt: h["x-fh-run-attempt"],
         headSha: h["x-fh-sha"],
         headBranch: h["x-fh-branch"],

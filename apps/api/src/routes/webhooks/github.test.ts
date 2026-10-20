@@ -69,7 +69,7 @@ function workflowRunEvent(
 
 async function setup(github = fakeGithub()) {
   const { db, close } = await createTestDb();
-  await seedRepo(db, { githubRepoId: REPO_ID, owner: "acme", name: "widgets" });
+  await seedRepo(db, { externalRepoId: REPO_ID, owner: "acme", name: "widgets" });
   const app = await buildApp({ db, logger: false, ciSources: new CiSourceRegistry([github.adapter]) });
 
   let deliveries = 0;
@@ -112,6 +112,8 @@ describe("POST /webhooks/github workflow_run", () => {
 
       expect(res.statusCode).toBe(200);
       expect(await t.results()).toBe(1);
+      const { rows } = await t.db.execute(sql`select ci_source from workflow_runs`);
+      expect(rows).toEqual([{ ci_source: "github_actions" }]);
       const [event] = await t.events();
       expect(event?.processedAt).not.toBeNull();
       expect(event?.processingError).toBeNull();

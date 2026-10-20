@@ -14,9 +14,9 @@ describe("GET /api/repos", () => {
   it("lists repos ordered by full name with only the public fields", async () => {
     const { db, close, app } = await setup();
     try {
-      await seedRepo(db, { githubRepoId: 1, owner: "zeta", name: "last" });
-      await seedRepo(db, { githubRepoId: 2, owner: "acme", name: "widgets" });
-      await seedRepo(db, { githubRepoId: 3, owner: "acme", name: "api" });
+      await seedRepo(db, { externalRepoId: 1, owner: "zeta", name: "last" });
+      await seedRepo(db, { externalRepoId: 2, owner: "acme", name: "widgets" });
+      await seedRepo(db, { externalRepoId: 3, owner: "acme", name: "api" });
 
       const res = await app.inject({ method: "GET", url: "/api/repos" });
 
@@ -33,7 +33,7 @@ describe("GET /api/repos", () => {
   it("paginates with a total that ignores limit and offset", async () => {
     const { db, close, app } = await setup();
     try {
-      for (const name of ["a", "b", "c"]) await seedRepo(db, { githubRepoId: name.charCodeAt(0), name });
+      for (const name of ["a", "b", "c"]) await seedRepo(db, { externalRepoId: name.charCodeAt(0), name });
 
       const page2 = await app.inject({ method: "GET", url: "/api/repos?limit=2&offset=2" });
       expect(page2.json().page).toEqual({ limit: 2, offset: 2, total: 3 });

@@ -1,8 +1,8 @@
-/** Where a repository's code lives and what identifies it. Only GitHub so far. */
-export type RepoHost = "github";
+import type { CiSource, RepoHost } from "@flakehunter/shared-types";
 
-/** The system that ran a workflow and holds its artifacts. A repository's runs can come from several. */
-export type CiSource = "github_actions";
+// Re-exported for the root scripts, which cannot resolve workspace packages themselves.
+export { REPO_HOSTS } from "@flakehunter/shared-types";
+export type { CiSource, RepoHost };
 
 /** A registered repository, as a CI adapter needs it. Owner and name come from the `repos` row, never a payload. */
 export interface CiRepo {

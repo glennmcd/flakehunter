@@ -34,7 +34,7 @@ function fakeAdapter(zip: Uint8Array, artifacts?: ReportArtifact[]) {
 async function seedRepo(db: TestDb): Promise<CiRepo> {
   const [repo] = await db
     .insert(repos)
-    .values({ githubRepoId: 1, owner: "acme", name: "widgets", fullName: "acme/widgets" })
+    .values({ host: "github", externalRepoId: 1, owner: "acme", name: "widgets", fullName: "acme/widgets" })
     .returning({ id: repos.id });
   if (!repo) throw new Error("failed to seed repo");
   return { id: repo.id, host: "github", externalRepoId: 1, owner: "acme", name: "widgets" };
@@ -170,8 +170,9 @@ describe("processCiRun", () => {
           .insert(workflowRuns)
           .values({
             repoId: repo.id,
-            githubRunId: 200,
-            githubRunAttempt: 1,
+            ciSource: "github_actions",
+            ciRunId: 200,
+            runAttempt: 1,
             workflowName: "upload",
             headSha: "def456",
             status: "completed",

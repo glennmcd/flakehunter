@@ -1,9 +1,13 @@
 import { describe, expect, it } from "bun:test";
+import type { RepoHost } from "@flakehunter/shared-types";
 import { sql } from "drizzle-orm";
+import { strToU8, zipSync } from "fflate";
 import { buildApiApp } from "../../../test/apiApp.js";
 import { seedRepo } from "../../../test/fixtures.js";
 import { createTestDb, type TestDb } from "../../../test/testDb.js";
 import { mintRepoToken, revokeRepoToken } from "../../auth/repoToken.js";
+import type { CiSourceAdapter } from "../../ci/types.js";
+import { processCiRun, WEBHOOK_REPORT_KEY } from "../../ingest/processCiRun.js";
 import reportsRoute from "./reports.js";
 
 const SHA = "a".repeat(40);
@@ -205,7 +209,7 @@ describe("POST /api/reports", () => {
   it("writes to the repo the token belongs to, never to another repo", async () => {
     const { db, close, repo, token, app } = await setup();
     try {
-      const other = await seedRepo(db, { githubRepoId: 2, name: "other" });
+      const other = await seedRepo(db, { externalRepoId: 2, name: "other" });
       const { token: otherToken } = await mintRepoToken(db, other.id);
 
       await app.inject({ method: "POST", url: "/api/reports", headers: headers(token), payload: XML });
@@ -308,6 +312,56 @@ describe("POST /api/reports", () => {
       });
       expect(res.statusCode).toBe(413);
       expect(res.json().error.code).toBe("payload_too_large");
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("POST /api/reports and the CI source", () => {
+  it("records the run under the host's own CI, so it meets a webhook delivery of the same run", async () => {
+    const { db, close, repo, token, app } = await setup();
+    try {
+      const zip = zipSync({ "junit.xml": strToU8(XML) });
+      const adapter = {
+        ciSource: "github_actions" as const,
+        hosts: new Set<RepoHost>(["github"]) as ReadonlySet<RepoHost>,
+        listRunArtifacts: async () => [{ id: 1, name: "junit", sizeInBytes: zip.length, expired: false }],
+        downloadArtifact: async () => zip,
+      } satisfies CiSourceAdapter;
+      const ciRepo = {
+        id: repo.id,
+        host: repo.host,
+        externalRepoId: repo.externalRepoId,
+        owner: repo.owner,
+        name: repo.name,
+      };
+      await processCiRun(db, adapter, {
+        repo: ciRepo,
+        ciSource: "github_actions",
+        runId: 987,
+        attempt: 1,
+        workflowName: "CI",
+        headSha: SHA,
+        headBranch: "main",
+        status: "completed",
+        conclusion: "success",
+        runStartedAt: null,
+        runCompletedAt: null,
+        htmlUrl: null,
+      });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/reports",
+        headers: headers(token, { "x-fh-report-key": WEBHOOK_REPORT_KEY }),
+        payload: XML,
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().duplicate).toBe(true);
+      const { rows } = await db.execute(sql`select ci_source from workflow_runs`);
+      expect(rows).toEqual([{ ci_source: "github_actions" }]);
     } finally {
       await close();
     }

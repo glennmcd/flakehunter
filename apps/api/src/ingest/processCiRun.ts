@@ -38,8 +38,9 @@ export async function processCiRun(db: AnyDb, adapter: CiSourceAdapter, input: C
     .insert(workflowRuns)
     .values({
       repoId: input.repo.id,
-      githubRunId: input.runId,
-      githubRunAttempt: input.attempt,
+      ciSource: input.ciSource,
+      ciRunId: input.runId,
+      runAttempt: input.attempt,
       workflowName: input.workflowName,
       headSha: input.headSha,
       headBranch: input.headBranch,
@@ -50,7 +51,7 @@ export async function processCiRun(db: AnyDb, adapter: CiSourceAdapter, input: C
       htmlUrl: input.htmlUrl,
     })
     .onConflictDoUpdate({
-      target: [workflowRuns.repoId, workflowRuns.githubRunId, workflowRuns.githubRunAttempt],
+      target: [workflowRuns.repoId, workflowRuns.ciSource, workflowRuns.ciRunId, workflowRuns.runAttempt],
       set: {
         status: input.status,
         conclusion: input.conclusion,

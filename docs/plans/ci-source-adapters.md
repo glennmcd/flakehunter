@@ -150,7 +150,10 @@ Identity changes with them:
 |---|---|---|
 | repo by external id | `repos_github_repo_id_unique` on `(github_repo_id)` | unique `(host, github_repo_id)` |
 | repo by path | `repos_full_name_unique` on `(full_name)` | unique `(host, full_name)` |
-| run | `workflow_runs_repo_id_github_run_id_github_run_attempt_unique` on `(repo_id, github_run_id, github_run_attempt)` | unique `(repo_id, ci_source, github_run_id, github_run_attempt)` |
+| run | `workflow_runs_repo_id_github_run_id_github_run_attempt_unique` on `(repo_id, github_run_id, github_run_attempt)` | `workflow_runs_run_key_unique` on `(repo_id, ci_source, github_run_id, github_run_attempt)` |
+
+The run key is named explicitly: drizzle-kit's generated name for it is 71 characters, and Postgres would silently cut
+it to 63, leaving the snapshot out of step with the database.
 
 The run key is what makes several CI systems per repository safe: Jenkins build 1234 and GitHub Actions run 1234 on
 the same repository are different rows. Without it, the second would be a false duplicate, or a 400 for a SHA
@@ -177,9 +180,12 @@ which is what "regardless of which workflow or job produced the results" already
 
 ```ts
 externalRepoId: bigint("github_repo_id", { mode: "number" }).notNull(),
-runId: bigint("github_run_id", { mode: "number" }).notNull(),
+ciRunId: bigint("github_run_id", { mode: "number" }).notNull(),
 runAttempt: integer("github_run_attempt").notNull().default(1),
 ```
+
+`ciRunId` rather than `runId`: `runId` already means the `workflow_runs.id` foreign key on `reports`, `test_suites`
+and `test_results`, and `ciRunId` matches both the v2 field and the column name the naming cleanup moves to.
 
 Renaming the columns themselves waits for [Naming cleanup](#naming-cleanup). drizzle-kit asks interactively whether a
 changed column is a rename or a drop-and-add, and a wrong answer on Neon drops data; property names give the same

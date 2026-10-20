@@ -16,9 +16,9 @@ async function seedFixture(db: TestDb, repoId: number) {
   const r1At = daysAgo(2);
   const r2At = daysAgo(1);
   const oldAt = daysAgo(40);
-  const r1 = await seedRun(db, repoId, { githubRunId: 1, headSha: sha(1), createdAt: r1At });
-  const r2 = await seedRun(db, repoId, { githubRunId: 2, headSha: sha(2), createdAt: r2At });
-  const old = await seedRun(db, repoId, { githubRunId: 3, headSha: sha(9), createdAt: oldAt });
+  const r1 = await seedRun(db, repoId, { ciRunId: 1, headSha: sha(1), createdAt: r1At });
+  const r2 = await seedRun(db, repoId, { ciRunId: 2, headSha: sha(2), createdAt: r2At });
+  const old = await seedRun(db, repoId, { ciRunId: 3, headSha: sha(9), createdAt: oldAt });
 
   // A is flaky on sha(1) (pass + fail); B passes; C errors; D is skipped.
   await seedResult(db, repoId, { name: "A", status: "passed", headSha: sha(1), runId: r1.id, createdAt: r1At });
@@ -110,7 +110,7 @@ describe("GET /api/repos/:id/summary", () => {
     const { db, close, repo, app } = await setup();
     try {
       const at = daysAgo(40);
-      await seedRun(db, repo.id, { githubRunId: 1, createdAt: at });
+      await seedRun(db, repo.id, { ciRunId: 1, createdAt: at });
       const res = await app.inject({ method: "GET", url: `/api/repos/${repo.id}/summary` });
       expect(res.json().totals.runs).toBe(0);
       expect(res.json().lastRunAt).toBe(at.toISOString());
@@ -139,7 +139,7 @@ describe("GET /api/repos/:id/summary", () => {
   it("ignores other repos", async () => {
     const { db, close, repo, app } = await setup();
     try {
-      const other = await seedRepo(db, { githubRepoId: 2, name: "other" });
+      const other = await seedRepo(db, { externalRepoId: 2, name: "other" });
       await seedFixture(db, other.id);
 
       const res = await app.inject({ method: "GET", url: `/api/repos/${repo.id}/summary` });

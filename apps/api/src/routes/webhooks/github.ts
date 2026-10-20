@@ -1,5 +1,5 @@
 import type { GithubWorkflowRunEvent } from "@flakehunter/shared-types";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from "fastify";
 import { workflowRunSkipReason } from "../../ci/githubActions/runSource.js";
 import { createWebhookVerifier } from "../../ci/githubActions/webhookVerify.js";
@@ -87,14 +87,17 @@ async function handleCompletedRun(fastify: FastifyInstance, event: GithubWorkflo
   const skipReason = workflowRunSkipReason(event);
   if (skipReason) return skipReason;
 
-  const [repo] = await fastify.db.select().from(repos).where(eq(repos.githubRepoId, event.repository.id));
+  const [repo] = await fastify.db
+    .select()
+    .from(repos)
+    .where(and(eq(repos.host, "github"), eq(repos.externalRepoId, event.repository.id)));
   if (!repo) return `no repo registered for github_repo_id ${event.repository.id}`;
 
   // Owner and name from the registered row, not the payload: the repo id is what was matched, so the name must follow it.
   const ciRepo: CiRepo = {
     id: repo.id,
-    host: "github",
-    externalRepoId: repo.githubRepoId,
+    host: repo.host,
+    externalRepoId: repo.externalRepoId,
     owner: repo.owner,
     name: repo.name,
   };

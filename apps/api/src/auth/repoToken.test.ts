@@ -21,7 +21,7 @@ describe("repo API tokens", () => {
       expect(row?.tokenHash).not.toBe(token);
       expect(JSON.stringify(row)).not.toContain(token);
 
-      expect(await findRepoByToken(db, token)).toEqual({ id: repo.id, fullName: "acme/widgets" });
+      expect(await findRepoByToken(db, token)).toEqual({ id: repo.id, host: "github", fullName: "acme/widgets" });
     } finally {
       await close();
     }
@@ -63,8 +63,8 @@ describe("repo API tokens", () => {
   it("scopes each token to its own repo", async () => {
     const { db, close } = await createTestDb();
     try {
-      const a = await seedRepo(db, { githubRepoId: 1, name: "a" });
-      const b = await seedRepo(db, { githubRepoId: 2, name: "b" });
+      const a = await seedRepo(db, { externalRepoId: 1, name: "a" });
+      const b = await seedRepo(db, { externalRepoId: 2, name: "b" });
       const tokenA = await mintRepoToken(db, a.id);
       const tokenB = await mintRepoToken(db, b.id);
       expect((await findRepoByToken(db, tokenA.token))?.id).toBe(a.id);
