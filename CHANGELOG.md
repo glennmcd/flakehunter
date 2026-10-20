@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/glennmcd/flakehunter/compare/v0.3.0...v0.4.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** remove API v1 and the week-1 routes ([#24](https://github.com/glennmcd/flakehunter/issues/24))
+
+### Features
+
+* **api:** remove API v1 and the week-1 routes ([#24](https://github.com/glennmcd/flakehunter/issues/24)) ([dfb57db](https://github.com/glennmcd/flakehunter/commit/dfb57db573f454cd9eb572a217f1eddccbd5dca5))
+
 ## [0.3.0](https://github.com/glennmcd/flakehunter/compare/v0.2.0...v0.3.0) (2026-10-20)
 
 
