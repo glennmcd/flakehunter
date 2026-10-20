@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/glennmcd/flakehunter/compare/v0.2.0...v0.3.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* force release ([#20](https://github.com/glennmcd/flakehunter/issues/20))
+
+### Features
+
+* force release ([#20](https://github.com/glennmcd/flakehunter/issues/20)) ([71c3961](https://github.com/glennmcd/flakehunter/commit/71c396137bb532d98033228cb7d62719f0afd0bc))
+
 ## [0.2.0](https://github.com/glennmcd/flakehunter/compare/v0.1.1...v0.2.0) (2026-10-08)
 
 
