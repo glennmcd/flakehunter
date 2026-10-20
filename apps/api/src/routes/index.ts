@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
-import { API_VERSIONS, type ApiRouteOptions, type ApiVersion, apiPrefix } from "../api/version.js";
+import { API_VERSIONS, type ApiRouteOptions, type ApiVersion, registerApiVersion } from "../api/version.js";
 import flakyTestsRoute from "./api/flakyTests.js";
 import reportsRoute from "./api/reports.js";
 import repoSummaryRoute from "./api/repoSummary.js";
@@ -34,8 +34,8 @@ export type RouteModule =
  * runtime, which a bundler (esbuild for Lambda) cannot see, so the routes would be missing from the bundle.
  * The prefixes are the ones autoload derived from the directory names: files in routes/api/ live under /api and
  * routes/webhooks/github.ts under /webhooks. Files in routes/api/ are also mounted at /api/v2: the same plugin,
- * registered again with `apiVersion: 2`. Adding a route file means adding a line here; routes.test.ts fails if one
- * is forgotten.
+ * registered again with `apiVersion: 2`; each version's plugins share one context (registerApiVersion), which for v1
+ * adds the deprecation headers. Adding a route file means adding a line here; routes.test.ts fails if one is forgotten.
  */
 export const routeModules: RouteModule[] = [
   { file: "health", plugin: healthRoute, prefix: "" },
@@ -54,12 +54,10 @@ export const routeModules: RouteModule[] = [
 
 export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   for (const m of routeModules) {
-    if (m.versions) {
-      for (const apiVersion of m.versions) {
-        await fastify.register(m.plugin, { prefix: apiPrefix(apiVersion), apiVersion });
-      }
-    } else {
-      await fastify.register(m.plugin, { prefix: m.prefix });
-    }
+    if (!m.versions) await fastify.register(m.plugin, { prefix: m.prefix });
+  }
+  for (const apiVersion of API_VERSIONS) {
+    const plugins = routeModules.flatMap((m) => (m.versions?.includes(apiVersion) ? [m.plugin] : []));
+    await registerApiVersion(fastify, apiVersion, plugins);
   }
 }

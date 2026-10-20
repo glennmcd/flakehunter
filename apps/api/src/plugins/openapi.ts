@@ -2,22 +2,26 @@ import swagger from "@fastify/swagger";
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import { jsonSchemaTransform } from "fastify-type-provider-zod";
-import { API_VERSIONS, type ApiVersion, apiPrefix } from "../api/version.js";
+import {
+  API_VERSIONS,
+  type ApiVersion,
+  apiPrefix,
+  DOCS_URLS,
+  SPEC_URLS,
+  V1_DEPRECATED_AT,
+  V1_DEPRECATION_HEADERS,
+} from "../api/version.js";
 import { MAX_REPORT_BYTES } from "../ingest/limits.js";
 
 /**
  * Version of each published contract (docs/openapi.json, docs/openapi.v2.json), not of the app: release-please bumps the
  * app version on every release, which would make the committed specs stale each time. Bump the minor for compatible
  * additions; a breaking change gets a new path prefix instead (see docs/decisions/0010-openapi-published-contract.md).
- * v2 is a pre-release while it still has v1's schemas; it becomes 2.0.0 with its own contract (docs/plans/api-v2.md).
+ * v1 is 1.1.0 because marking its operations deprecated is a compatible change.
  */
-export const API_CONTRACT_VERSIONS: Record<ApiVersion, string> = { 1: "1.0.0", 2: "2.0.0" };
+export const API_CONTRACT_VERSIONS: Record<ApiVersion, string> = { 1: "1.1.0", 2: "2.0.0" };
 
-/** Where each version's OpenAPI document and docs page are served. */
-export const SPEC_URLS: Record<ApiVersion, string> = { 1: "/openapi.json", 2: "/openapi.v2.json" };
-export const DOCS_URLS: Record<ApiVersion, string> = { 1: "/docs", 2: "/docs/v2" };
-
-const docsPage = (title: string, specUrl: string) => `<!doctype html>
+const docsPage = (title: string, specUrl: string, notice = "") => `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -26,7 +30,7 @@ const docsPage = (title: string, specUrl: string) => `<!doctype html>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css" />
   </head>
   <body>
-    <div id="ui"></div>
+${notice}    <div id="ui"></div>
     <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
     <script>
       SwaggerUIBundle({ url: "${specUrl}", dom_id: "#ui" });
@@ -47,17 +51,70 @@ function versionOfPath(path: string): ApiVersion | null {
   return path.startsWith(`${apiPrefix(1)}/`) ? 1 : null;
 }
 
+const V1_DEPRECATION_NOTE =
+  `Deprecated since ${V1_DEPRECATED_AT.toISOString().slice(0, 10)}: use the same operation under ${apiPrefix(2)} ` +
+  `(${SPEC_URLS[2]}, ${DOCS_URLS[2]}).`;
+
+/** How the v1 deprecation headers appear on every v1 response in docs/openapi.json. */
+const V1_RESPONSE_HEADERS = {
+  Deprecation: {
+    description: "RFC 9745: v1 is deprecated, since the given Unix time.",
+    schema: { type: "string", const: V1_DEPRECATION_HEADERS.deprecation },
+  },
+  Link: {
+    description: "The successor version (the v2 OpenAPI document) and the v2 docs page.",
+    schema: { type: "string", const: V1_DEPRECATION_HEADERS.link },
+  },
+};
+
+/** Every v1 operation marked deprecated, with a note pointing at v2 and the headers each response carries. */
+function deprecateV1(paths: OpenApiDoc["paths"] & object): OpenApiDoc["paths"] {
+  return Object.fromEntries(
+    Object.entries(paths).map(([path, operations]) => [
+      path,
+      Object.fromEntries(
+        Object.entries(operations).map(([method, op]) => {
+          const responses = (op.responses ?? {}) as Record<string, Record<string, unknown>>;
+          return [
+            method,
+            {
+              ...op,
+              description: op.description
+                ? `${op.description}
+
+${V1_DEPRECATION_NOTE}`
+                : V1_DEPRECATION_NOTE,
+              deprecated: true,
+              responses: Object.fromEntries(
+                Object.entries(responses).map(([status, response]) => [
+                  status,
+                  { ...response, headers: { ...(response.headers as object), ...V1_RESPONSE_HEADERS } },
+                ]),
+              ),
+            },
+          ];
+        }),
+      ),
+    ]),
+  );
+}
+
 /**
  * One version's document, cut from the document of every route: only that version's paths and its contract version;
  * the components, tags and the rest are shared. Safe because the generated document inlines every schema, so neither
- * half can point at the other (plugins/openapi.test.ts checks there is no $ref). The input is not modified.
+ * half can point at the other (plugins/openapi.test.ts checks there is no $ref). v1's operations are marked deprecated.
+ * The input is not modified.
  */
 export function specForVersion(document: object, version: ApiVersion): object {
   const full = document as OpenApiDoc;
   const paths = Object.fromEntries(
     Object.entries(full.paths ?? {}).filter(([path]) => versionOfPath(path) === version),
   );
-  return { ...full, info: { ...full.info, version: API_CONTRACT_VERSIONS[version] }, paths };
+  return {
+    ...full,
+    info: { ...full.info, version: API_CONTRACT_VERSIONS[version] },
+    paths: version === 1 ? deprecateV1(paths) : paths,
+  };
 }
 
 /** The upload route takes a raw XML body, which has no zod schema, so its request body is described here. */
@@ -82,6 +139,11 @@ function describeReportsUpload(doc: OpenApiDoc, path: string): void {
   });
   post.parameters = parameters;
 }
+
+const V1_DOCS_NOTICE = `    <p role="note" style="font: 14px sans-serif; margin: 16px 20px">
+      API v1 is deprecated. See <a href="${DOCS_URLS[2]}">API v2</a>.
+    </p>
+`;
 
 const openapiPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(swagger, {
@@ -124,7 +186,10 @@ const openapiPlugin: FastifyPluginAsync = async (fastify) => {
   });
 
   for (const version of API_VERSIONS) {
-    const page = docsPage(version === 1 ? "FlakeHunter API" : `FlakeHunter API v${version}`, SPEC_URLS[version]);
+    const page =
+      version === 1
+        ? docsPage("FlakeHunter API", SPEC_URLS[1], V1_DOCS_NOTICE)
+        : docsPage(`FlakeHunter API v${version}`, SPEC_URLS[version]);
     fastify.get(SPEC_URLS[version], { schema: { hide: true } }, async () => specForVersion(fastify.swagger(), version));
     fastify.get(DOCS_URLS[version], { schema: { hide: true } }, async (_request, reply) =>
       reply.type("text/html; charset=utf-8").send(page),
