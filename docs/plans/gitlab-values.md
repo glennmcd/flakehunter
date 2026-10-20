@@ -1,6 +1,6 @@
 # GitLab host and CI source values
 
-**Status:** Brief, for review. No code changes until this is agreed.
+**Status:** Implemented. Migration `0006_gitlab_values.sql`; spec `2.1.0`.
 
 flakehunter-airflow is adding a DAG that uploads GitLab CI results through `POST /api/v2/reports`
 ([its plan](https://github.com/glennmcd/flakehunter-airflow/blob/main/docs/plans/gitlab-ingest.md)). It needs

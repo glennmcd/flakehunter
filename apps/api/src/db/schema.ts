@@ -14,6 +14,11 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 
+/** `('a','b')` for a check constraint. Only for the fixed lists in shared-types, never for input: values are inlined. */
+function inList(values: readonly string[]) {
+  return sql.raw(`(${values.map((v) => `'${v}'`).join(",")})`);
+}
+
 export const repos = pgTable(
   "repos",
   {
@@ -27,7 +32,7 @@ export const repos = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    check("repos_host_check", sql`${table.host} IN ('github')`),
+    check("repos_host_check", sql`${table.host} IN ${inList(REPO_HOSTS)}`),
     unique().on(table.host, table.externalRepoId),
     unique().on(table.host, table.fullName),
   ],
@@ -74,7 +79,7 @@ export const workflowRuns = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    check("workflow_runs_ci_source_check", sql`${table.ciSource} IN ('github_actions')`),
+    check("workflow_runs_ci_source_check", sql`${table.ciSource} IN ${inList(CI_SOURCES)}`),
     // Runs from different CI systems can share an id and attempt, so the CI source is part of the key.
     unique("workflow_runs_run_key_unique").on(table.repoId, table.ciSource, table.ciRunId, table.runAttempt),
     index("idx_workflow_runs_repo_sha").on(table.repoId, table.headSha),

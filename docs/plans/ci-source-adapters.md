@@ -15,7 +15,7 @@ A GitHub repository can be built by GitHub Actions, by Jenkins, or by both, so a
 can come from several CI sources. CI-specific fetching sits behind a `CiSourceAdapter` interface, with
 `GithubActionsAdapter` as the only implementation.
 
-Every repository today is `github` and every run is `github_actions`. The host and CI source are exposed in
+Hosts are `github` and `gitlab`, and CI sources `github_actions` and `gitlab_ci` ([gitlab-values.md](gitlab-values.md)); `gitlab_ci` runs arrive only through uploads, with no adapter. The host and CI source are exposed in
 [API v2](api-v2.md). This is the groundwork for GitLab (flakehunter-airflow's
 [GitLab ingest](https://github.com/glennmcd/flakehunter-airflow/blob/main/docs/plans/gitlab-ingest.md)) and for CI-only
 systems.
@@ -48,13 +48,16 @@ The `github/` folder and `plugins/github.ts` no longer exist; `processWorkflowRu
 
 ```ts
 // packages/shared-types/src/domain.ts
-export const REPO_HOSTS = ["github"] as const;
+export const REPO_HOSTS = ["github", "gitlab"] as const;
 export type RepoHost = (typeof REPO_HOSTS)[number];
 
-export const CI_SOURCES = ["github_actions"] as const;
+export const CI_SOURCES = ["github_actions", "gitlab_ci"] as const;
 export type CiSource = (typeof CI_SOURCES)[number];
 
-export const DEFAULT_CI_SOURCE: Readonly<Record<RepoHost, CiSource>> = { github: "github_actions" };
+export const DEFAULT_CI_SOURCE: Readonly<Record<RepoHost, CiSource>> = {
+  github: "github_actions",
+  gitlab: "gitlab_ci",
+};
 ```
 
 The arrays feed the Drizzle column enums in `db/schema.ts` and the scripts' input checks. Each new value is added here
@@ -152,9 +155,9 @@ calls `processCiRun` with `fastify.ciSources.get("github_actions")`.
 
 | Table | Column | Rule |
 |---|---|---|
-| `repos` | `host text not null` | `repos_host_check`: `host in ('github')` |
+| `repos` | `host text not null` | `repos_host_check`: `host in REPO_HOSTS` |
 | `repos` | `external_repo_id bigint not null` | the host's own repository id |
-| `workflow_runs` | `ci_source text not null` | `workflow_runs_ci_source_check`: `ci_source in ('github_actions')` |
+| `workflow_runs` | `ci_source text not null` | `workflow_runs_ci_source_check`: `ci_source in CI_SOURCES` |
 | `workflow_runs` | `ci_run_id bigint not null`, `run_attempt integer not null default 1` | the CI system's run id and attempt |
 
 | Key | Columns |
@@ -186,7 +189,7 @@ Flaky detection does not change. A test that passes on Jenkins and fails on GitH
 which is what "regardless of which workflow or job produced the results" already means.
 
 `resolveRepo` matches `full_name` within a host when one is given (`github:acme/widgets`). A bare path that
-matches repositories on more than one host is a 400 naming the hosts; with only `github`, nothing is ambiguous. Paths
+matches repositories on more than one host is a 400 naming the hosts. Paths
 can be nested (`group/sub/project`), in the API and in `TOKEN_REPO_FULL_NAME`.
 
 ### Migrations
@@ -198,18 +201,16 @@ can be nested (`group/sub/project`), in the API and in `TOKEN_REPO_FULL_NAME`.
   `github_run_attempt` to `external_repo_id`, `ci_run_id` and `run_attempt`, and renames the repo key to
   `repos_host_external_repo_id_unique`. A rename keeps the data and only changes the catalog. A column rename is always
   written this way, never by `db:generate`, which may offer a drop-and-add; afterwards `db:generate` reports no changes.
+- `0006_gitlab_values.sql`, generated: widens both check constraints to the GitLab values. The constraints are built
+  from `REPO_HOSTS` and `CI_SOURCES` in `db/schema.ts`, so adding a value and running `db:generate` is the whole change.
 
 ## Remaining work
 
-1. **GitLab values.** `gitlab` in `REPO_HOSTS` and `repos_host_check`, `gitlab_ci` in `CI_SOURCES` and
-   `workflow_runs_ci_source_check`, `DEFAULT_CI_SOURCE.gitlab = "gitlab_ci"`, and a regenerated
-   `docs/openapi.v2.json`, released under a new tag. flakehunter-airflow re-pins to that tag before its GitLab DAG
-   lands; it is pinned at `v0.3.0`, where the enums hold only `github` and `github_actions`. No GitLab adapter is
-   needed: GitLab data arrives through `POST /api/v2/reports`, and an adapter matters only for a future GitLab webhook.
-   Brief: [gitlab-values.md](gitlab-values.md).
-2. **flakehunter-airflow**, as part of its GitLab work: move `download_artifact` out of `github.py` into a shared
-   module, and reword the `RunHeaders` docstring in `client.py`, which says the values come from the GitHub
-   `workflow_run`.
+1. **GitLab values:** done ([gitlab-values.md](gitlab-values.md)); spec 2.1.0. flakehunter-airflow re-pins to the
+   release that carries it before its GitLab DAG lands.
+2. **flakehunter-airflow**, as part of its GitLab work: `download_artifact` has moved to its `shared` package; the
+   `RunHeaders` docstring in `shared/client.py`, which says the values come from the GitHub `workflow_run`, is reworded
+   with the re-pin.
 
 With v1 retired ([ADR 0012](../decisions/0012-api-v2-alongside-v1.md)), `grep -ri github` over `apps/api/src`
 outside `ci/githubActions/`, `routes/webhooks/`, the migrations and tests finds only the webhook's wiring (its
@@ -237,8 +238,8 @@ and `openapi/buildSpec.ts`, and `github` or `github_actions` as values and in ex
 | Uploads write the CI source, with and without `X-FH-CI-Source` | `routes/api/reports.test.ts` |
 | An upload without the header and one naming `github_actions` are one run | `api/versions.test.ts` |
 | `findRepoByToken` returns the host | `auth/repoToken.test.ts` |
-| Migration 0003: fills old rows, no defaults, check constraints, new keys; migration 0004: keeps rows and keys | `db/schema.test.ts` |
+| Migration 0003: fills old rows, no defaults, check constraints, new keys; 0004: keeps rows and keys; 0006: every listed value passes, others fail | `db/schema.test.ts` |
 | Nested paths, a bare path on two hosts is a 400, a host-qualified path resolves | `api/resolveRepo.test.ts` |
 
-Only `github` and `github_actions` pass the check constraints, so the multi-host and multi-source tests in
-`schema.test.ts` and `resolveRepo.test.ts` drop the constraint in their own PGlite database first.
+The multi-host and multi-source tests use the real `gitlab` and `gitlab_ci` values; uploads for a `gitlab`
+repository and a `gitlab_ci` run beside a `github_actions` one with the same id are in `api/versions.test.ts`.

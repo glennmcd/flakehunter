@@ -43,6 +43,13 @@
       "when": 1792526403632,
       "tag": "0005_drop_flaky_tests_view",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792538345821,
+      "tag": "0006_gitlab_values",
+      "breakpoints": true
     }
   ]
 }

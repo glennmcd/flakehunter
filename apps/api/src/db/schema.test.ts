@@ -3,6 +3,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import { CI_SOURCES, REPO_HOSTS } from "@flakehunter/shared-types";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { createTestDb } from "../../test/testDb.js";
@@ -181,7 +182,7 @@ describe("migration 0003 (host and ci_source)", () => {
     try {
       await t.migrateRest();
 
-      expect(await failure(t.client, insertRepo("gitlab", 1, "acme/widgets"))).toContain("repos_host_check");
+      expect(await failure(t.client, insertRepo("bitbucket", 1, "acme/widgets"))).toContain("repos_host_check");
       await t.client.exec(insertRepo("github", 1, "acme/widgets"));
       expect(await failure(t.client, insertRun("jenkins", 1))).toContain("workflow_runs_ci_source_check");
     } finally {
@@ -193,12 +194,6 @@ describe("migration 0003 (host and ci_source)", () => {
     const t = await migratedUntil("0003_host_and_ci_source");
     try {
       await t.migrateRest();
-      // Only one host and one CI source exist, so lift the checks to show what the keys allow once there are more.
-      await t.client.exec(`
-        alter table repos drop constraint repos_host_check;
-        alter table workflow_runs drop constraint workflow_runs_ci_source_check;
-      `);
-
       await t.client.exec(insertRepo("github", 1, "acme/widgets"));
       expect(await failure(t.client, insertRepo("github", 1, "acme/other"))).toContain(
         "repos_host_external_repo_id_unique",
@@ -208,8 +203,29 @@ describe("migration 0003 (host and ci_source)", () => {
 
       await t.client.exec(insertRun("github_actions", 100));
       expect(await failure(t.client, insertRun("github_actions", 100))).toContain("workflow_runs_run_key_unique");
-      expect(await failure(t.client, insertRun("jenkins", 100))).toBeNull();
+      expect(await failure(t.client, insertRun("gitlab_ci", 100))).toBeNull();
       expect(await failure(t.client, insertRun("github_actions", 100, 2))).toBeNull();
+    } finally {
+      await t.close();
+    }
+  });
+});
+
+describe("migration 0006 (GitLab values)", () => {
+  it("accepts every host and CI source in shared-types and still refuses others", async () => {
+    const t = await migratedUntil("0006_gitlab_values");
+    try {
+      expect(await failure(t.client, insertRepo("gitlab", 1, "acme/widgets"))).toContain("repos_host_check");
+      await t.migrateRest();
+
+      for (const [i, host] of REPO_HOSTS.entries()) {
+        expect(await failure(t.client, insertRepo(host, i + 1, `acme/`))).toBeNull();
+      }
+      expect(await failure(t.client, insertRepo("bitbucket", 99, "acme/other"))).toContain("repos_host_check");
+      for (const [i, ciSource] of CI_SOURCES.entries()) {
+        expect(await failure(t.client, insertRun(ciSource, i + 1))).toBeNull();
+      }
+      expect(await failure(t.client, insertRun("jenkins", 99))).toContain("workflow_runs_ci_source_check");
     } finally {
       await t.close();
     }

@@ -42,12 +42,12 @@ Seeding a repo row (required before ingestion works for that repo):
 SEED_REPO_OWNER=<owner> SEED_REPO_NAME=<repo> SEED_REPO_EXTERNAL_ID=<id> bun run --env-file=apps/api/.env scripts/seed-dev-repo.ts
 ```
 
-`SEED_REPO_HOST` defaults to `github` (the only host today); `SEED_REPO_EXTERNAL_ID` is the host's numeric repo id, and the older `SEED_REPO_GITHUB_ID` still works. The `github_installations` row is only written for `github`.
+`SEED_REPO_HOST` defaults to `github` (or `gitlab`, with the GitLab project id and a namespace that may be nested, `group/sub`); `SEED_REPO_EXTERNAL_ID` is the host's numeric repo id, and the older `SEED_REPO_GITHUB_ID` still works. The `github_installations` row is only written for `github`.
 
 Minting a per-repo upload token for `POST /api/v2/reports` (printed once; only its sha256 is stored):
 
 ```bash
-TOKEN_REPO_FULL_NAME=<owner>/<repo> bun run --env-file=apps/api/.env scripts/create-repo-token.ts   # TOKEN_REPO_HOST defaults to github; nested paths (group/sub/project) are accepted
+TOKEN_REPO_FULL_NAME=<owner>/<repo> bun run --env-file=apps/api/.env scripts/create-repo-token.ts   # TOKEN_REPO_HOST defaults to github (or gitlab); nested paths (group/sub/project) are accepted
 ```
 
 Revoking an upload token (takes effect on its next request; running it twice is harmless):
@@ -74,7 +74,7 @@ bun run seed:demo --dry-run                              # generate and count on
 
 ### Ingestion path
 
-A repository has a **host** (`repos.host`: where its code lives, `github` today) and each run a **CI source** (`workflow_runs.ci_source`: what ran it, `github_actions` today); see ADR 0011. The values are `REPO_HOSTS`, `CI_SOURCES` and `DEFAULT_CI_SOURCE` in `packages/shared-types/src/domain.ts`, and the database has a check constraint for each, so a new value goes in both in one change. Neither column has a default: every insert names them. The CI identity columns are neutral too: `repos.external_repo_id`, `workflow_runs.ci_run_id` and `run_attempt` (Drizzle `externalRepoId`, `ciRunId`, `runAttempt`), renamed from `github_*` by the hand-written `0004_rename_ci_columns.sql`. A column rename is always a custom `RENAME COLUMN` migration, never `db:generate`, which may offer a drop-and-add; afterwards `db:generate` must report no changes.
+A repository has a **host** (`repos.host`: where its code lives: `github` or `gitlab`) and each run a **CI source** (`workflow_runs.ci_source`: what ran it: `github_actions` or `gitlab_ci`); see ADR 0011. The values are `REPO_HOSTS`, `CI_SOURCES` and `DEFAULT_CI_SOURCE` in `packages/shared-types/src/domain.ts`, and the database has a check constraint for each, built from those lists in `db/schema.ts`; a new value is added to the list and `db:generate` writes the migration that widens the constraint. Neither column has a default: every insert names them. The CI identity columns are neutral too: `repos.external_repo_id`, `workflow_runs.ci_run_id` and `run_attempt` (Drizzle `externalRepoId`, `ciRunId`, `runAttempt`), renamed from `github_*` by the hand-written `0004_rename_ci_columns.sql`. A column rename is always a custom `RENAME COLUMN` migration, never `db:generate`, which may offer a drop-and-add; afterwards `db:generate` must report no changes.
 
 CI-specific fetching goes through a `CiSourceAdapter` (`ci/types.ts`: `listRunArtifacts`, `downloadArtifact`, plus the `ciSource` it serves and the `hosts` it can fetch for). `ci/registry.ts` (`CiSourceRegistry`) looks one up by CI source and throws on an unknown one. `GithubActionsAdapter` in `ci/githubActions/` is the only adapter; that folder also holds the Octokit client, signature verification (`webhookVerify.ts`), the trust check (`runSource.ts`) and `workflowRun.ts` (`workflowRunToInput`, payload → neutral `CiRunInput`).
 
