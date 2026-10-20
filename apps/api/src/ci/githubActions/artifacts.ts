@@ -1,18 +1,11 @@
-import { ArtifactRejectedError } from "../ingest/limits.js";
+import { ArtifactRejectedError } from "../../ingest/limits.js";
+import type { ReportArtifact } from "../types.js";
 import type { GithubClient } from "./client.js";
-
-export interface RunArtifact {
-  id: number;
-  name: string;
-  sizeInBytes: number;
-  /** Expired artifacts are still listed but can no longer be downloaded. */
-  expired: boolean;
-}
 
 export async function listRunArtifacts(
   client: GithubClient,
   params: { owner: string; repo: string; runId: number },
-): Promise<RunArtifact[]> {
+): Promise<ReportArtifact[]> {
   const { data } = await client.rest.actions.listWorkflowRunArtifacts({
     owner: params.owner,
     repo: params.repo,

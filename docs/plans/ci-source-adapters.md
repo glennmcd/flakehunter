@@ -86,12 +86,13 @@ export interface CiSourceAdapter {
 ```
 
 `GithubActionsAdapter` (`ci/githubActions/GithubActionsAdapter.ts`) implements it over Octokit with
-`hosts = {"github"}`, using the code now in `github/artifacts.ts`. It also owns the inbound side, as plain methods the
-webhook route calls:
+`hosts = {"github"}`, using the code now in `github/artifacts.ts`. The inbound side lives next to it in
+`ci/githubActions/` as plain functions the webhook route calls, so the adapter (and every fake of it in tests) covers
+only fetching:
 
-- `skipReason(event)`: today's `workflowRunSkipReason`, unchanged;
-- `toRunInput(event, repo)`: maps a `workflow_run` payload to the neutral `CiRunInput` (below), taking owner and name
-  from the registered repo, never the payload, as today.
+- `workflowRunSkipReason(event)` in `runSource.ts`, unchanged;
+- `workflowRunToInput(event, repo)` in `workflowRun.ts`: maps a `workflow_run` payload to the neutral `CiRunInput`
+  (below), taking owner and name from the registered repo, never the payload, as today.
 
 Signature verification and the delivery-id dedupe stay in `routes/webhooks/github.ts`. They are part of GitHub's
 webhook protocol, and the route stays at `/webhooks/github`.

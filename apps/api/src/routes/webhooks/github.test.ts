@@ -5,9 +5,10 @@ import { strToU8, zipSync } from "fflate";
 import { seedRepo } from "../../../test/fixtures.js";
 import { createTestDb } from "../../../test/testDb.js";
 import { buildApp } from "../../app.js";
+import { FORK_RUN_SKIP_REASON, TRIGGER_SKIP_REASON } from "../../ci/githubActions/runSource.js";
+import { CiSourceRegistry } from "../../ci/registry.js";
+import type { CiRepo, CiSourceAdapter, RepoHost, ReportArtifact } from "../../ci/types.js";
 import { webhookEvents } from "../../db/schema.js";
-import type { GithubClient } from "../../github/client.js";
-import { FORK_RUN_SKIP_REASON, TRIGGER_SKIP_REASON } from "../../github/runSource.js";
 
 const SECRET = "test-webhook-secret";
 const REPO_ID = 4242;
@@ -23,25 +24,23 @@ afterAll(() => {
   process.env = saved;
 });
 
-/** A GitHub client serving one artifact; `calls` records each request's method and owner/repo. */
+/** A GitHub Actions adapter serving one artifact; `calls` records each request's method and owner/repo. */
 function fakeGithub(junit = JUNIT) {
   const zip = zipSync({ "junit.xml": strToU8(junit) });
   const calls: string[] = [];
-  const client = {
-    rest: {
-      actions: {
-        listWorkflowRunArtifacts: async ({ owner, repo }: { owner: string; repo: string }) => {
-          calls.push(`list ${owner}/${repo}`);
-          return { data: { artifacts: [{ id: 1, name: "junit", size_in_bytes: zip.length, expired: false }] } };
-        },
-        downloadArtifact: async ({ owner, repo }: { owner: string; repo: string }) => {
-          calls.push(`download ${owner}/${repo}`);
-          return { data: zip.buffer };
-        },
-      },
+  const adapter = {
+    ciSource: "github_actions" as const,
+    hosts: new Set<RepoHost>(["github"]) as ReadonlySet<RepoHost>,
+    listRunArtifacts: async (repo: CiRepo, _runId: number): Promise<ReportArtifact[]> => {
+      calls.push(`list ${repo.owner}/${repo.name}`);
+      return [{ id: 1, name: "junit", sizeInBytes: zip.length, expired: false }];
     },
-  } as unknown as GithubClient;
-  return { client, calls };
+    downloadArtifact: async (repo: CiRepo, _artifactId: number, _maxBytes: number) => {
+      calls.push(`download ${repo.owner}/${repo.name}`);
+      return zip;
+    },
+  } satisfies CiSourceAdapter;
+  return { adapter, calls };
 }
 
 function workflowRunEvent(
@@ -71,7 +70,7 @@ function workflowRunEvent(
 async function setup(github = fakeGithub()) {
   const { db, close } = await createTestDb();
   await seedRepo(db, { githubRepoId: REPO_ID, owner: "acme", name: "widgets" });
-  const app = await buildApp({ db, logger: false, github: github.client });
+  const app = await buildApp({ db, logger: false, ciSources: new CiSourceRegistry([github.adapter]) });
 
   let deliveries = 0;
   const deliver = (payload: unknown, opts: { deliveryId?: string; secret?: string } = {}) => {
@@ -189,9 +188,9 @@ describe("POST /webhooks/github workflow_run", () => {
 
   it("stores fixed text, not the raw error, when processing fails unexpectedly", async () => {
     const github = fakeGithub();
-    github.client.rest.actions.listWorkflowRunArtifacts = (async () => {
+    github.adapter.listRunArtifacts = async () => {
       throw new Error("connect ECONNREFUSED postgres://user:secret@db.internal");
-    }) as unknown as GithubClient["rest"]["actions"]["listWorkflowRunArtifacts"];
+    };
     const t = await setup(github);
     try {
       const res = await t.deliver(workflowRunEvent());
@@ -285,9 +284,9 @@ describe("POST /webhooks/github workflow_run", () => {
 
   it("records a rejected artifact's fixed message and still answers 200", async () => {
     const github = fakeGithub();
-    github.client.rest.actions.listWorkflowRunArtifacts = (async () => ({
-      data: { artifacts: [{ id: 1, name: "huge", size_in_bytes: 50 * 1024 * 1024, expired: false }] },
-    })) as unknown as GithubClient["rest"]["actions"]["listWorkflowRunArtifacts"];
+    github.adapter.listRunArtifacts = async () => [
+      { id: 1, name: "huge", sizeInBytes: 50 * 1024 * 1024, expired: false },
+    ];
     const t = await setup(github);
     try {
       const res = await t.deliver(workflowRunEvent());
