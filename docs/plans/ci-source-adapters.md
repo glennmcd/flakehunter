@@ -206,6 +206,7 @@ can be nested (`group/sub/project`), in the API and in `TOKEN_REPO_FULL_NAME`.
    `docs/openapi.v2.json`, released under a new tag. flakehunter-airflow re-pins to that tag before its GitLab DAG
    lands; it is pinned at `v0.3.0`, where the enums hold only `github` and `github_actions`. No GitLab adapter is
    needed: GitLab data arrives through `POST /api/v2/reports`, and an adapter matters only for a future GitLab webhook.
+   Brief: [gitlab-values.md](gitlab-values.md).
 2. **flakehunter-airflow**, as part of its GitLab work: move `download_artifact` out of `github.py` into a shared
    module, and reword the `RunHeaders` docstring in `client.py`, which says the values come from the GitHub
    `workflow_run`.
