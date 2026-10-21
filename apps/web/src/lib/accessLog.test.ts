@@ -3,7 +3,6 @@ import { loginLogLine, loginOutcome } from "./accessLog";
 
 const allow = { allow: true } as const;
 const challenge = { allow: false, status: 401 } as const;
-const notConfigured = { allow: false, status: 503 } as const;
 
 function headers(values: Record<string, string> = {}) {
   return new Headers(values);
@@ -66,12 +65,6 @@ describe("loginOutcome", () => {
   it("has no login when the gate is open (no password set), even if a client sends an Authorization header", () => {
     expect(
       loginOutcome({ decision: allow, headers: withCredentials, pathname: "/", sitePassword: undefined }),
-    ).toBeNull();
-  });
-
-  it("does not call a 'not configured' refusal a failed login", () => {
-    expect(
-      loginOutcome({ decision: notConfigured, headers: withCredentials, pathname: "/", sitePassword: undefined }),
     ).toBeNull();
   });
 });

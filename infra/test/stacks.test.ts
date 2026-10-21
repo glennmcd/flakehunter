@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { type ApiStackProps, DEFAULT_THROTTLE, SECRET_NAMES } from "../lib/api-stack.js";
-import { ENV_SAFE_SECRET_PATTERN } from "../lib/web-stack.js";
+import { ENV_SAFE_SECRET_PATTERN, SITE_PASSWORD_PATTERN } from "../lib/web-stack.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const infraRoot = path.join(here, "..");
@@ -357,14 +357,26 @@ describe("WebStack Amplify app", () => {
     expect(envVar("webConnected", "SITE_PASSWORD")?.Value).toEqual({ Ref: "SitePassword" });
     const { template } = scenario("webConnected");
     template.hasParameter("ApiToken", { Type: "String", NoEcho: true });
-    template.hasParameter("SitePassword", { Type: "String", NoEcho: true, MinLength: 8 });
+    // Optional: the default, empty, leaves the dashboard open.
+    template.hasParameter("SitePassword", { Type: "String", NoEcho: true, Default: "" });
+  });
+
+  it("accepts an empty site password (gate off) or one of 8 or more env-safe characters", () => {
+    scenario("webConnected").template.hasParameter("SitePassword", {
+      AllowedPattern: SITE_PASSWORD_PATTERN,
+      ConstraintDescription: Match.anyValue(),
+    });
+    const allowed = new RegExp(SITE_PASSWORD_PATTERN);
+    for (const good of ["", "Tr0ub4dor!3", "x-y_z.~+/=@%^*,:?!"]) expect(allowed.test(good)).toBe(true);
+    for (const bad of ["short1!", "pass#word1", "pass word12", "pa$HOME12"]) expect(allowed.test(bad)).toBe(false);
   });
 
   it("only accepts secrets that survive the trip through .env.production unchanged", () => {
     const { template } = scenario("webConnected");
-    for (const name of ["ApiToken", "SitePassword"]) {
-      template.hasParameter(name, { AllowedPattern: ENV_SAFE_SECRET_PATTERN, ConstraintDescription: Match.anyValue() });
-    }
+    template.hasParameter("ApiToken", {
+      AllowedPattern: ENV_SAFE_SECRET_PATTERN,
+      ConstraintDescription: Match.anyValue(),
+    });
     const allowed = new RegExp(ENV_SAFE_SECRET_PATTERN);
     // Next loads .env.production with dotenv and dotenv-expand: an unquoted value is cut at "#", "$NAME" is replaced
     // by another variable, and quotes, backslashes and whitespace change how the line is read.

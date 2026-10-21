@@ -148,29 +148,25 @@ describe("proxy (site password gate)", () => {
       expect(JSON.parse(info[0] ?? "")).toMatchObject({ outcome: "success", fetchDest: "document" });
     });
 
-    it("logs nothing when the site is open in development", async () => {
-      configure({ NODE_ENV: "development" });
+    it("logs nothing when the site is open (no password set)", async () => {
+      configure({ NODE_ENV: "production" });
       const { info, warn } = await withLogs(request("http://localhost:3000/", "demo:anything", client));
       expect(info).toEqual([]);
       expect(warn).toEqual([]);
     });
   });
 
-  it("is open without a password in development", async () => {
-    configure({ NODE_ENV: "development" });
-    const response = await proxy(request());
-    expect(response.status).toBe(200);
-    expect(response.headers.get("x-middleware-next")).toBe("1");
-  });
-
-  it("refuses to serve (503) without a password in production, whatever the request carries", async () => {
-    configure({ NODE_ENV: "production" });
-    for (const req of [request(), request("http://localhost:3000/", "demo:anything")]) {
-      const response = await proxy(req);
-      expect(response.status).toBe(503);
-      expect(response.headers.get("www-authenticate")).toBeNull();
-      expect(response.headers.get("cache-control")).toBe("no-store");
-      expect(await response.text()).toContain("not configured");
+  it("is open without a password in every environment, whatever the request carries", async () => {
+    for (const NODE_ENV of ["development", "production"]) {
+      for (const SITE_PASSWORD of [undefined, ""]) {
+        configure({ SITE_PASSWORD, NODE_ENV });
+        for (const req of [request(), request("http://localhost:3000/_next/static/chunk.js", "demo:anything")]) {
+          const response = await proxy(req);
+          expect(response.status).toBe(200);
+          expect(response.headers.get("x-middleware-next")).toBe("1");
+          expect(response.headers.get("www-authenticate")).toBeNull();
+        }
+      }
     }
   });
 });

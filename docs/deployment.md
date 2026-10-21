@@ -87,7 +87,7 @@ browser. Pages: `/` (repository list; goes straight to the repo when there is on
 1. Copy `apps/web/.env.example` to `apps/web/.env.local` and set:
    - `API_BASE_URL`: where the API runs (default `http://localhost:3000`)
    - `API_TOKEN`: the API's read token (the same value as `API_TOKEN` in `apps/api/.env`)
-   - `SITE_PASSWORD`: password for the site-wide gate; leave empty to disable it locally
+   - `SITE_PASSWORD`: optional password for the site-wide gate; leave empty for an open site
 2. With the API running, start it:
    ```bash
    bun run dev:web
@@ -95,9 +95,9 @@ browser. Pages: `/` (repository list; goes straight to the repo when there is on
    It serves on <http://localhost:3001> (the API uses 3000).
 
 **Site password.** When `SITE_PASSWORD` is set, every page and asset is behind HTTP Basic auth: the
-browser prompts once, and you can enter any username with the password. When it is unset the site
-is open in development, but a production build **refuses to serve (503)** rather than going public
-by accident. Basic auth sends the password with every request, so only expose the site over HTTPS
+browser prompts once, and you can enter any username with the password. When it is unset or empty
+the site is **open to anyone**, in development and production alike. Basic auth sends the password
+with every request, so only expose a gated site over HTTPS
 (Amplify Hosting does this for you).
 
 `bun run build:web` makes a production build (CI runs it).
@@ -384,8 +384,11 @@ bun run --cwd infra cdk deploy FlakeHunterWeb --profile g26work \
   -c repository=https://github.com/<owner>/<repo> -c githubTokenSecretName=flakehunter/github-token
 ```
 
-Add the two `-c` flags to `~/.cdk.json` too. The site password is what visitors type (any username); production
-refuses to serve at all without one. Both secrets may use only letters, digits and `! % * + , - . / : = ? @ ^ _ ~`
+Add the two `-c` flags to `~/.cdk.json` too. The site password is optional: it is what visitors type (any
+username), and without it the dashboard is public. Leave out the `SitePassword` line on the first deploy for an open
+site. Later deploys keep the previous value when the line is left out, so to turn the gate off again pass
+`--parameters FlakeHunterWeb:SitePassword=` (empty), and to turn it on pass a password. Amplify only picks up the
+change on its next build. Both secrets may use only letters, digits and `! % * + , - . / : = ? @ ^ _ ~`
 (no `#`, `$`, quotes or spaces): the build writes them into a `.env` file, where those characters would silently
 change the value, so the deploy refuses them. The first build normally starts by itself; if the Amplify console shows none:
 
@@ -805,7 +808,7 @@ settings, never in a browser.
 | SSM `/flakehunter/demo/` | `GITHUB_PAT`, `GITHUB_WEBHOOK_SECRET` | random placeholders; webhook stays inert |
 | Secrets Manager | `flakehunter/github-token` | GitHub token Amplify uses to read the repository |
 | CloudFormation parameter | `FlakeHunterWeb:ApiToken` | same as the `API_TOKEN` parameter |
-| CloudFormation parameter | `FlakeHunterWeb:SitePassword` | the dashboard gate, 8 or more characters |
+| CloudFormation parameter | `FlakeHunterWeb:SitePassword` | optional dashboard gate: empty for an open site, else 8 or more characters |
 | CDK context (`~/.cdk.json` or `-c`) | `alertEmail`, `monthlyBudgetUsd` | budget alert address and amount (default 30) |
 | CDK context | `reservedConcurrency` | optional Lambda concurrency cap |
 | CDK context | `throttleRate`, `throttleBurst` | API requests per second and burst (defaults 10 and 20); the hard cap on flood cost |
@@ -818,7 +821,7 @@ settings, never in a browser.
 
 | Symptom | Likely cause and fix |
 | --- | --- |
-| Dashboard returns 503 "site password is not configured" | `SitePassword` was empty; redeploy `FlakeHunterWeb` with the parameter. |
+| Dashboard is open (or still asks for a password) after changing `SitePassword` | Amplify reads it at build time; start a new build (`aws amplify start-job ...`, step 8). |
 | Dashboard says it cannot reach the API or the token was rejected | `API_BASE_URL` wrong, or `ApiToken` differs from the `API_TOKEN` parameter; redeploy the web stack. |
 | API returns 500 and logs "Could not load secrets from SSM" | A parameter is missing or empty, or the Lambda's role cannot read it; the message names it. |
 | API returns 500 "RATE_LIMIT_TABLE is not set" | The Lambda was deployed outside the stack; deploy through CDK. |

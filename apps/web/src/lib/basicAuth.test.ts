@@ -61,51 +61,19 @@ describe("gateDecision", () => {
   const good = basic("user:hunter2");
 
   it("allows a correct password and challenges anything else (401)", () => {
-    expect(gateDecision({ authorization: good, sitePassword: "hunter2", nodeEnv: "production" })).toEqual({
-      allow: true,
-    });
-    expect(gateDecision({ authorization: basic("u:nope"), sitePassword: "hunter2", nodeEnv: "production" })).toEqual({
+    expect(gateDecision({ authorization: good, sitePassword: "hunter2" })).toEqual({ allow: true });
+    expect(gateDecision({ authorization: basic("u:nope"), sitePassword: "hunter2" })).toEqual({
       allow: false,
       status: 401,
     });
-    expect(gateDecision({ authorization: null, sitePassword: "hunter2", nodeEnv: "development" })).toEqual({
-      allow: false,
-      status: 401,
-    });
+    expect(gateDecision({ authorization: null, sitePassword: "hunter2" })).toEqual({ allow: false, status: 401 });
   });
 
-  it("enforces the password in every environment once it is set", () => {
-    for (const nodeEnv of ["development", "test", "production", undefined]) {
-      expect(gateDecision({ authorization: null, sitePassword: "hunter2", nodeEnv }).allow).toBe(false);
+  it("is open when no password is set, or it is empty, with or without credentials", () => {
+    for (const sitePassword of [undefined, ""]) {
+      for (const authorization of [null, good, basic("u:nope")]) {
+        expect(gateDecision({ authorization, sitePassword })).toEqual({ allow: true });
+      }
     }
-  });
-
-  it("is open without a password in development and test", () => {
-    expect(gateDecision({ authorization: null, sitePassword: undefined, nodeEnv: "development" })).toEqual({
-      allow: true,
-    });
-    expect(gateDecision({ authorization: null, sitePassword: undefined, nodeEnv: "test" })).toEqual({ allow: true });
-  });
-
-  it("fails closed (503) without a password in production and in any unknown environment", () => {
-    for (const nodeEnv of ["production", undefined, "staging", ""]) {
-      expect(gateDecision({ authorization: null, sitePassword: undefined, nodeEnv })).toEqual({
-        allow: false,
-        status: 503,
-      });
-    }
-    // Even a header that looks like credentials does not open an ungated production site.
-    expect(gateDecision({ authorization: good, sitePassword: undefined, nodeEnv: "production" })).toEqual({
-      allow: false,
-      status: 503,
-    });
-  });
-
-  it("treats an empty password as unset", () => {
-    expect(gateDecision({ authorization: null, sitePassword: "", nodeEnv: "production" })).toEqual({
-      allow: false,
-      status: 503,
-    });
-    expect(gateDecision({ authorization: null, sitePassword: "", nodeEnv: "development" })).toEqual({ allow: true });
   });
 });
