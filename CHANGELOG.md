@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/glennmcd/flakehunter/compare/v0.5.0...v0.5.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **api:** enhance JUnit parser to decode character references and imp… ([#31](https://github.com/glennmcd/flakehunter/issues/31)) ([33ac14a](https://github.com/glennmcd/flakehunter/commit/33ac14a1b2e5f8f1b674cc2eace254a49fa93d90))
+
 ## [0.5.0](https://github.com/glennmcd/flakehunter/compare/v0.4.0...v0.5.0) (2026-10-21)
 
 
