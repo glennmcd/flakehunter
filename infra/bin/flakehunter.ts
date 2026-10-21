@@ -43,7 +43,8 @@ const api = new ApiStack(app, "FlakeHunterApi", {
 const rawDomain = app.node.tryGetContext("customDomain");
 const customDomain = typeof rawDomain === "string" ? JSON.parse(rawDomain) : rawDomain;
 
-// The dashboard on Amplify Hosting. Deploy with the two secrets it needs and, to build from GitHub, the repository:
+// The dashboard on Amplify Hosting. Deploy with its read token, optionally a site password (omit it for an open site)
+// and, to build from GitHub, the repository:
 //   cdk deploy FlakeHunterWeb --parameters FlakeHunterWeb:ApiToken=... --parameters FlakeHunterWeb:SitePassword=... \
 //     -c repository=https://github.com/<owner>/<repo> -c githubTokenSecretName=<secrets manager secret>
 new WebStack(app, "FlakeHunterWeb", {

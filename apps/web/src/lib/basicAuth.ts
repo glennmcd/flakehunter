@@ -26,21 +26,16 @@ export function checkBasicAuth(header: string | null | undefined, password: stri
   return timingSafeEqual(digest(decoded.slice(colon + 1)), digest(password));
 }
 
-export type GateDecision = { allow: true } | { allow: false; status: 401 | 503 };
+export type GateDecision = { allow: true } | { allow: false; status: 401 };
 
 /**
- * Whether a request may see the site. With a password set it is enforced everywhere. Without one the site is open
- * only in development and test; any other environment (production, or one we do not recognise) refuses to serve
- * rather than quietly going public.
+ * Whether a request may see the site. The gate is opt-in: with a password set it is enforced in every environment;
+ * without one (unset or empty) the site is open.
  */
 export function gateDecision(input: {
   authorization: string | null | undefined;
   sitePassword: string | undefined;
-  nodeEnv: string | undefined;
 }): GateDecision {
-  if (input.sitePassword) {
-    return checkBasicAuth(input.authorization, input.sitePassword) ? { allow: true } : { allow: false, status: 401 };
-  }
-  if (input.nodeEnv === "development" || input.nodeEnv === "test") return { allow: true };
-  return { allow: false, status: 503 };
+  if (!input.sitePassword) return { allow: true };
+  return checkBasicAuth(input.authorization, input.sitePassword) ? { allow: true } : { allow: false, status: 401 };
 }

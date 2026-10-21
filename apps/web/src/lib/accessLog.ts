@@ -32,7 +32,7 @@ function isPageRequest(pathname: string, headers: Headers): boolean {
  * - a **success** is a request that sent accepted credentials for a page (not an asset or a background fetch; see
  *   isPageRequest), so each page load logs once instead of once per file and prefetch;
  * - a request with no credentials is the browser's first request, which the gate answers with the password prompt, and
- *   a gate that is open (development) has no login: neither is logged.
+ *   a gate that is open (no password set) has no login: neither is logged.
  */
 export function loginOutcome(input: {
   decision: GateDecision;
@@ -41,7 +41,7 @@ export function loginOutcome(input: {
   sitePassword: string | undefined;
 }): LoginOutcome | null {
   const presented = input.headers.has("authorization");
-  if (!input.decision.allow) return input.decision.status === 401 && presented ? "failure" : null;
+  if (!input.decision.allow) return presented ? "failure" : null;
   if (!presented || !input.sitePassword) return null;
   return isPageRequest(input.pathname, input.headers) ? "success" : null;
 }

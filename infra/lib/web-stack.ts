@@ -112,6 +112,10 @@ applications:
 export const ENV_SAFE_SECRET_PATTERN = "^[A-Za-z0-9!%*+,./:=?@^_~-]+$";
 const ENV_SAFE_SECRET_RULE = "Use only letters, digits and ! % * + , - . / : = ? @ ^ _ ~ (no #, $, quotes or spaces).";
 
+/** The site password is optional: empty turns the gate off, otherwise 8 or more of the env-safe characters. */
+export const SITE_PASSWORD_PATTERN = "^([A-Za-z0-9!%*+,./:=?@^_~-]{8,})?$";
+const SITE_PASSWORD_RULE = `Leave empty for an open site, or use 8 or more characters. ${ENV_SAFE_SECRET_RULE}`;
+
 export class WebStack extends Stack {
   readonly app: CfnApp;
 
@@ -134,10 +138,10 @@ export class WebStack extends Stack {
     const sitePassword = new CfnParameter(this, "SitePassword", {
       type: "String",
       noEcho: true,
-      minLength: 8,
-      allowedPattern: ENV_SAFE_SECRET_PATTERN,
-      constraintDescription: ENV_SAFE_SECRET_RULE,
-      description: "Password for the site-wide Basic auth gate. Production refuses to serve without one.",
+      default: "",
+      allowedPattern: SITE_PASSWORD_PATTERN,
+      constraintDescription: SITE_PASSWORD_RULE,
+      description: "Optional password for the site-wide Basic auth gate. Empty (the default) serves an open site.",
     });
 
     // Amplify delivers the dashboard's server-side output (including the login log) to CloudWatch Logs through this role;
@@ -222,7 +226,7 @@ export class WebStack extends Stack {
     new CfnOutput(this, "AmplifyAppId", { value: this.app.attrAppId });
     new CfnOutput(this, "SiteUrl", {
       value: `https://${branchName}.${this.app.attrDefaultDomain}`,
-      description: "The dashboard (asks for the site password)",
+      description: "The dashboard (asks for the site password when SitePassword is set)",
     });
   }
 }
