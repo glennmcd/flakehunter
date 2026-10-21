@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/glennmcd/flakehunter/compare/v0.4.0...v0.5.0) (2026-10-21)
+
+
+### Features
+
+* **api:** accept GitLab repositories and gitlab_ci runs ([#28](https://github.com/glennmcd/flakehunter/issues/28)) ([0dd8160](https://github.com/glennmcd/flakehunter/commit/0dd81603664da1ab1142bc6e8e05e0418d577aae))
+* **ci:** enhance release job to validate file changes and update doc… ([#26](https://github.com/glennmcd/flakehunter/issues/26)) ([2be1244](https://github.com/glennmcd/flakehunter/commit/2be124427c15a65f055882f0d8060867f04a1d99))
+
 ## [0.4.0](https://github.com/glennmcd/flakehunter/compare/v0.3.0...v0.4.0) (2026-10-20)
 
 
