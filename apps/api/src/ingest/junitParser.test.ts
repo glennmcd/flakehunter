@@ -155,6 +155,21 @@ describe("parseJunitXml", () => {
       expect(testCase?.failureStack).toBe(`expected a < b && c > d "e'\n`.repeat(300).trim());
     });
 
+    it("decodes decimal and hexadecimal character references in attributes and text", () => {
+      // Reporters write newlines inside attributes as &#10;; Python's ElementTree, which merges reports, does too.
+      const stack = "at a&#10;at b&#x9;&#x1F600;\n".repeat(600);
+      const xml = `<testsuite name="S"><testcase classname="c" name="t"><failure message="Expected: &gt; 0.5&#10;&#10;Received: 0.37">${stack}</failure></testcase></testsuite>`;
+
+      const testCase = parseJunitXml(xml)[0]?.testCases[0];
+      expect(testCase?.failureMessage).toBe("Expected: > 0.5\n\nReceived: 0.37");
+      expect(testCase?.failureStack).toBe("at a\nat b\t😀\n".repeat(600).trim());
+    });
+
+    it("keeps an escaped reference literal and leaves an out-of-range one as written", () => {
+      const xml = `<testsuite name="S"><testcase classname="c" name="&amp;#10; &#x110000;" /></testsuite>`;
+      expect(parseJunitXml(xml)[0]?.testCases[0]?.name).toBe("&#10; &#x110000;");
+    });
+
     // The parser reads a DOCTYPE wherever one appears outside CDATA, comments and processing instructions, and applies
     // its entities to everything after it, so each placement is tried.
     const doctype = (entities: string) => `<!DOCTYPE a [${entities}]>`;
