@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/glennmcd/flakehunter/compare/v0.5.1...v0.6.0) (2026-10-21)
+
+
+### Features
+
+* **auth:** make site password optional, allowing open access in all … ([#33](https://github.com/glennmcd/flakehunter/issues/33)) ([1ea7fbc](https://github.com/glennmcd/flakehunter/commit/1ea7fbc84c942558504b3974aa19a781be300be5))
+
 ## [0.5.1](https://github.com/glennmcd/flakehunter/compare/v0.5.0...v0.5.1) (2026-10-21)
 
 
