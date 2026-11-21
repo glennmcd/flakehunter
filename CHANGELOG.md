@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/glennmcd/flakehunter/compare/v0.7.0...v0.8.0) (2026-11-21)
+
+
+### Features
+
+* add .cdk.json configuration file for deployment context ([ec369f4](https://github.com/glennmcd/flakehunter/commit/ec369f46e3549c010172f0f300fbdc3e6e7dbce7))
+
 ## [0.7.0](https://github.com/glennmcd/flakehunter/compare/v0.6.0...v0.7.0) (2026-11-21)
 
 
