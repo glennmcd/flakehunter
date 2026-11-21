@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.0](https://github.com/glennmcd/flakehunter/compare/v0.6.0...v0.7.0) (2026-11-21)
+
+
+### Features
+
+* add .cdk.json configuration file for deployment context ([0e182d6](https://github.com/glennmcd/flakehunter/commit/0e182d62c2403aae3bbbad2b370323117e1dd774))
+* add .cdk.json configuration file for deployment context ([740400f](https://github.com/glennmcd/flakehunter/commit/740400f1930f415831f5f7d90f2c3ec35a918b04))
+
+
+### Bug Fixes
+
+* **infra:** update cdk.json and remove .cdk.json ([#36](https://github.com/glennmcd/flakehunter/issues/36)) ([0e182d6](https://github.com/glennmcd/flakehunter/commit/0e182d62c2403aae3bbbad2b370323117e1dd774))
+
 ## [0.6.0](https://github.com/glennmcd/flakehunter/compare/v0.5.1...v0.6.0) (2026-10-21)
 
 
